@@ -51,7 +51,7 @@ class TransactionController extends Controller
      */
     public function create(string $id)
     {
-        //    
+        //
     }
 
     /**
@@ -390,20 +390,23 @@ class TransactionController extends Controller
 
             if ($request->pembangunan) {
                 $up = $uang_pembangunan;
-                if (count($request->potongan) > 0) {
-                    if ($percentUP > 0) {
-                        $up = $uang_pembangunan - (($uang_pembangunan * $percentUP) / 100);
-                    }
+                if ($request->potongan != null) {
+                    if (count($request->potongan) > 0) {
+                        if ($percentUP > 0) {
+                            $up = $uang_pembangunan - (($uang_pembangunan * $percentUP) / 100);
+                        }
 
-                    foreach ($request->potongan as $potongan) {
-                        $data_pot = Discount::findorFail($potongan);
+                        foreach ($request->potongan as $potongan) {
+                            $data_pot = Discount::findorFail($potongan);
 
-                        if ($data_pot->jenis == 'Uang Pembangunan') {
-                            $total_pot = ($uang_pembangunan * $data_pot->besaran) / 100;
-                            DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+                            if ($data_pot->jenis == 'Uang Pembangunan') {
+                                $total_pot = ($uang_pembangunan * $data_pot->besaran) / 100;
+                                DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+                            }
                         }
                     }
                 }
+
                 SchoolDevFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $up, 'keterangan' => $request->pembangunan_ket]);
             }
 
@@ -440,7 +443,7 @@ class TransactionController extends Controller
         ]));
     }
 
-    // print 
+    // print
     public function print(string $id): View
     {
         $data = Transaction::findOrFail($id);
@@ -526,7 +529,7 @@ class TransactionController extends Controller
         $pesanUtama =
             'Halo ' . $transaction->student->nama . ',
 Selamat! Pembayaran uang sekolah Anda telah berhasil diproses.
-        
+
 Rincian Pembayaran :
 Nama Siswa: ' . $transaction->student->nama . '
 Nomor Induk Siswa: ' . $transaction->nis . '
@@ -537,7 +540,7 @@ Uang Lainnya: ' . $this->currency($transaction->jumlah_lainnya) . '
 Potongan: ' . $this->currency($transaction->jumlah_potongan) . '
 *Jumlah Pembayaran: ' . $this->currency($transaction->total) . '*
 Tanggal Pembayaran: ' . date('d/m/Y', strtotime($transaction->tgl_transaksi)) . '
-        
+
         ';
         $pesan = $pesanUtama . '' . $message->pesan_tambahan;
 
@@ -593,7 +596,7 @@ Tanggal Pembayaran: ' . date('d/m/Y', strtotime($transaction->tgl_transaksi)) . 
             case 10:
                 return 'Oktober';
             case 11:
-                return 'Oktober';
+                return 'November';
             case 12:
                 return 'Desember';
             default:

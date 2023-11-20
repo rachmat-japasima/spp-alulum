@@ -7,6 +7,8 @@
     <title>Print Invoice</title>
     <style>
         body {
+            font-size: 20px;
+            font-weight: bold;
             font-family: 'Calibri','Gill Sans', 'Gill Sans MT', 'Trebuchet MS', sans-serif;
         }
         img {
@@ -19,46 +21,46 @@
 
         .noBukti{
             position: absolute;
-            margin-top: 4cm;
-            margin-left: 3.8cm;
+            margin-top: 3.5cm;
+            margin-left: 2.5cm;
         }
 
         .nis{
             position: absolute;
-            margin-top: 4.8cm;
-            margin-left: 3.8cm;
+            margin-top: 4.5cm;
+            margin-left: 2.5cm;
         }
 
         .nama{
             position: absolute;
-            margin-top: 5.5cm;
-            margin-left: 3.8cm;
+            margin-top: 5.6cm;
+            margin-left: 2.5cm;
         }
 
         .tingkat{
             position: absolute;
-            margin-top: 6.28cm;
-            margin-left: 3.8cm;
+            margin-top: 6.7cm;
+            margin-left: 2.5cm;
         }
 
         .kelas{
             position: absolute;
-            margin-top: 7.1cm;
-            margin-left: 3.8cm;
+            margin-top: 7.7cm;
+            margin-left: 2.5cm;
         }
 
         .terbilang{
             position: absolute;
-            margin-top: 8.7cm;
-            margin-left: 3.8cm;
+            margin-top: 9.7cm;
+            margin-left: 3cm;
             text-transform: capitalize;
             width: 8cm;
         }
 
         .jenis{
             position: absolute;
-            margin-top: 10cm;
-            margin-left: 3.8cm;
+            margin-top: 11cm;
+            margin-left: 3cm;
             text-transform: capitalize;
             width: 8cm;
             font-weight: bold;
@@ -66,26 +68,26 @@
 
         .tanggal{
             position: absolute;
-            margin-top: 4cm;
-            margin-left: 9.4cm;
+            margin-top: 3.4cm;
+            margin-left: 8.4cm;
         }
 
         .tahun{
             position: absolute;
-            margin-top: 4.7cm;
-            margin-left: 9.4cm;
+            margin-top: 4.4cm;
+            margin-left: 8.4cm;
         }
 
         .pembayaran{
             position: absolute;
-            margin-top: 4cm;
-            margin-left: 15.3cm;
+            margin-top: 3.4cm;
+            margin-left: 14.3cm;
         }
 
         .detail{
             position: absolute;
             margin-top: 4.7cm;
-            margin-left: 13cm;
+            margin-left: 12.5cm;
             width: 7cm;
         }
 
@@ -95,20 +97,20 @@
 
         .jumlah {
             position: absolute;
-            margin-top: 8.7cm;
-            margin-left: 15.3cm;
+            margin-top: 7.2cm;
+            margin-left: 14.3cm;
         }
 
         .tanggal-invoice{
             position: absolute;
-            margin-top: 9.5cm;
-            margin-left: 15.3cm;
+            margin-top: 8.7cm;
+            margin-left: 14.3cm;
         }
 
         .admin{
             position: absolute;
-            margin-top: 10.9cm;
-            margin-left: 12.9cm;
+            margin-top: 10.3cm;
+            margin-left: 14cm;
         }
 
     </style>
@@ -200,7 +202,7 @@
                 $temp = penyebut($nilai/1000000000) . " milyar" . penyebut(fmod($nilai,1000000000));
             } else if ($nilai < 1000000000000000) {
                 $temp = penyebut($nilai/1000000000000) . " trilyun" . penyebut(fmod($nilai,1000000000000));
-            }     
+            }
             return $temp;
         }
 
@@ -209,7 +211,7 @@
                 $hasil = "minus ". trim(penyebut($nilai));
             } else {
                 $hasil = trim(penyebut($nilai));
-            }     		
+            }
             return $hasil;
         }
     @endphp

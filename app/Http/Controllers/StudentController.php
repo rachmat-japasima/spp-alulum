@@ -112,11 +112,11 @@ class StudentController extends Controller
     public function update(StudentPostRequest $request, string $id) : RedirectResponse
     {
         $data       = $request->all();
-        $data['bulan_spp_terakhir'] = date('Y-m-d', strtotime('-1 month', $request->tmt_masuk));
+        $data['bulan_spp_terakhir'] = date('Y-m-d', strtotime('-1 month', strtotime($request->tmt_masuk)));
 
-        
+
         $student    = Student::findorFail($id);
-            
+
         $student->update($data);
         Alert::success('Berhasil', 'Data Siswa Berhasil Diubah!');
 
@@ -144,7 +144,7 @@ class StudentController extends Controller
     */
     public function active($id)
     {
-        $user = 
+        $user =
         Student::find($id);
         $user->status = 1;
         $user->save();
@@ -166,7 +166,7 @@ class StudentController extends Controller
         return back();
     }
 
-    public function getData(Request $request) 
+    public function getData(Request $request)
     {
         $data = Student::orderBy('nama')
                 ->Where('status', $request->status)
@@ -175,7 +175,7 @@ class StudentController extends Controller
         $dataTable = collect([]);
         $no = 1;
         foreach ($data as $item){
-            
+
             if ($item->tingkat == '0'){
                 $tingkat = '<span class="badge bg-danger">SD</span>';
             }elseif ($item->tingkat == '1') {
@@ -215,12 +215,12 @@ class StudentController extends Controller
 
             $dataTable->push([
                     'no' => $no,
-                    'nis' => $item->nis, 
-                    'nama' => $nama, 
-                    'jenis_kelamin' => $jenisKelamin, 
-                    'kelas' => $kelas, 
-                    'tahun_angkatan' => $item->tahun_angkatan, 
-                    'spp_terakhir' => $spp, 
+                    'nis' => $item->nis,
+                    'nama' => $nama,
+                    'jenis_kelamin' => $jenisKelamin,
+                    'kelas' => $kelas,
+                    'tahun_angkatan' => $item->tahun_angkatan,
+                    'spp_terakhir' => $spp,
                     'status' => $status,
                     'action' => $action
                 ]);
@@ -228,22 +228,22 @@ class StudentController extends Controller
         }
 
         // dd($dataTable);
-  
+
        return DataTables::of($dataTable)->escapeColumns([])->toJson();
-        
+
     }
 
     public function fillLastSPP()
     {
-        DB::table('siswa')->where('status', 1)->orWhereNull('bulan_spp_terakhir_new')->orderBy('id')->lazy()->each(function (object $data) {
-                if ($data->bulan_spp_terakhir != 0){
+        DB::table('siswa')->where('status', 1)->orWhereNull('bulan_spp_terakhir')->orderBy('id')->lazy()->each(function (object $data) {
+                if ($data->bulan_spp_terakhir_old != 0){
                     $student = Student::findOrFail($data->id);
                     echo $student->id;
 
                     if ($student){
-                        $student->bulan_spp_terakhir_new = '2023-'.$data->bulan_spp_terakhir.'-01';
+                        $student->bulan_spp_terakhir = '2023-'.$data->bulan_spp_terakhir_old.'-01';
                         $student->saveQuietly();
-                    }   
+                    }
                 }
         });
 
