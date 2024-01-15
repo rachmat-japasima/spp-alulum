@@ -111,7 +111,9 @@ class TransactionController extends Controller
             $listMonths = $this->getArrearsMonths(date('y') . '-06-01');
         }
 
+        $lastNumber = Transaction::whereDate('tgl_transaksi', Carbon::today())->count();
 
+        $transactionId = Carbon::now('Asia/Jakarta')->format('dmY') . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
 
         return view('pages.transaction.detail', ([
             'data' => $data,
@@ -127,6 +129,7 @@ class TransactionController extends Controller
             'discountList' => $discountList,
             'totalTransaksi' => $totalTransaksi,
             'months' => $listMonths,
+            'transactionId' => $transactionId
         ]));
     }
 
@@ -187,6 +190,10 @@ class TransactionController extends Controller
             $listMonths = $this->getArrearsMonths(date('y') . '-06-01');
         }
 
+        $lastNumber = Transaction::whereDate('tgl_transaksi', Carbon::today())->count();
+
+        $transactionId = Carbon::now('Asia/Jakarta')->format('dmY') . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+
         return view('pages.transaction.detail', ([
             'data' => $data,
             'list_siswa' => $list_siswa,
@@ -201,6 +208,7 @@ class TransactionController extends Controller
             'discountList' => $discountList,
             'totalTransaksi' => $totalTransaksi,
             'months' => $listMonths,
+            'transactionId' => $transactionId
         ]));
     }
 
@@ -245,6 +253,11 @@ class TransactionController extends Controller
 
     public function pay(Request $request): RedirectResponse
     {
+        if (Transaction::where('no_bukti', $request->no_bukti)) {
+            $lastNumber = Transaction::whereDate('tgl_transaksi', Carbon::today())->count();
+            $request['no_bukti'] = Carbon::now('Asia/Jakarta')->format('dmY') . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+        }
+
         $request->validate([
             'no_bukti' => ['required', 'string', 'max:255', Rule::unique('transaksi')->where('status', 'Success')],
             'tahun_ajaran' => ['required', 'string'],

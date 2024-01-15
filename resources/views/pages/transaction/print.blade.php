@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,8 +10,9 @@
         body {
             font-size: 20px;
             font-weight: bold;
-            font-family: 'Calibri','Gill Sans', 'Gill Sans MT', 'Trebuchet MS', sans-serif;
+            font-family: 'Calibri', 'Gill Sans', 'Gill Sans MT', 'Trebuchet MS', sans-serif;
         }
+
         img {
             pointer-events: none;
             position: absolute;
@@ -19,37 +21,37 @@
             z-index: -1;
         }
 
-        .noBukti{
+        .noBukti {
             position: absolute;
             margin-top: 3.5cm;
             margin-left: 2.5cm;
         }
 
-        .nis{
+        .nis {
             position: absolute;
             margin-top: 4.5cm;
             margin-left: 2.5cm;
         }
 
-        .nama{
+        .nama {
             position: absolute;
             margin-top: 5.6cm;
             margin-left: 2.5cm;
         }
 
-        .tingkat{
+        .tingkat {
             position: absolute;
             margin-top: 6.7cm;
             margin-left: 2.5cm;
         }
 
-        .kelas{
+        .kelas {
             position: absolute;
             margin-top: 7.7cm;
             margin-left: 2.5cm;
         }
 
-        .terbilang{
+        .terbilang {
             position: absolute;
             margin-top: 9.7cm;
             margin-left: 3cm;
@@ -57,7 +59,7 @@
             width: 8cm;
         }
 
-        .jenis{
+        .jenis {
             position: absolute;
             margin-top: 11cm;
             margin-left: 3cm;
@@ -66,32 +68,32 @@
             font-weight: bold;
         }
 
-        .tanggal{
+        .tanggal {
             position: absolute;
             margin-top: 3.4cm;
             margin-left: 8.4cm;
         }
 
-        .tahun{
+        .tahun {
             position: absolute;
             margin-top: 4.4cm;
             margin-left: 8.4cm;
         }
 
-        .pembayaran{
+        .pembayaran {
             position: absolute;
             margin-top: 3.4cm;
             margin-left: 14.3cm;
         }
 
-        .detail{
+        .detail {
             position: absolute;
             margin-top: 4.7cm;
             margin-left: 12.5cm;
             width: 7cm;
         }
 
-        br{
+        br {
             margin-top: 100px;
         }
 
@@ -101,121 +103,130 @@
             margin-left: 14.3cm;
         }
 
-        .tanggal-invoice{
+        .tanggal-invoice {
             position: absolute;
             margin-top: 8.7cm;
             margin-left: 14.3cm;
         }
 
-        .admin{
+        .admin {
             position: absolute;
             margin-top: 10.3cm;
             margin-left: 14cm;
         }
-
     </style>
+    <script type="text/javascript">
+        window.onload = function() {
+            window.print();
+        }
+    </script>
 </head>
+
 <body style="margin: 0;">
     @php
-        if ($student->tingkat == '0'){
+        if ($student->tingkat == '0') {
             $tingkat = 'SD';
-        }elseif ($student->tingkat == '1') {
+        } elseif ($student->tingkat == '1') {
             $tingkat = 'SMP';
-        }elseif ($student->tingkat == '2') {
+        } elseif ($student->tingkat == '2') {
             $tingkat = 'SMA';
-        }elseif ($student->tingkat == 'RA') {
+        } elseif ($student->tingkat == 'RA') {
             $tingkat = 'RA';
-        }else {
+        } else {
             $tingkat = '';
         }
 
-        if ($student->kelas == 'RA'){
+        if ($student->kelas == 'RA') {
             $kelas = 'ra';
-        }else {
-            $kelas = 'kelas_'.$student->kelas;
+        } else {
+            $kelas = 'kelas_' . $student->kelas;
         }
 
         $uang_sekolah = $schoolFeeAmount[$kelas] * $data->jumlah_bulan;
 
-        function getRomawi($bln){
-            switch ($bln){
-                    case 1:
-                        return "I";
-                        break;
-                    case 2:
-                        return "II";
-                        break;
-                    case 3:
-                        return "III";
-                        break;
-                    case 4:
-                        return "IV";
-                        break;
-                    case 5:
-                        return "V";
-                        break;
-                    case 6:
-                        return "VI";
-                        break;
-                    case 7:
-                        return "VII";
-                        break;
-                    case 8:
-                        return "VIII";
-                        break;
-                    case 9:
-                        return "IX";
-                        break;
-                    case 10:
-                        return "X";
-                        break;
-                    case 11:
-                        return "XI";
-                        break;
-                    case 12:
-                        return "XII";
-                        break;
+        function getRomawi($bln)
+        {
+            switch ($bln) {
+                case 1:
+                    return 'I';
+                    break;
+                case 2:
+                    return 'II';
+                    break;
+                case 3:
+                    return 'III';
+                    break;
+                case 4:
+                    return 'IV';
+                    break;
+                case 5:
+                    return 'V';
+                    break;
+                case 6:
+                    return 'VI';
+                    break;
+                case 7:
+                    return 'VII';
+                    break;
+                case 8:
+                    return 'VIII';
+                    break;
+                case 9:
+                    return 'IX';
+                    break;
+                case 10:
+                    return 'X';
+                    break;
+                case 11:
+                    return 'XI';
+                    break;
+                case 12:
+                    return 'XII';
+                    break;
             }
         }
 
-        function penyebut($nilai) {
+        function penyebut($nilai)
+        {
             $nilai = abs($nilai);
-            $huruf = array("", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas");
-            $temp = "";
+            $huruf = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+            $temp = '';
             if ($nilai < 12) {
-                $temp = " ". $huruf[$nilai];
-            } else if ($nilai <20) {
-                $temp = penyebut($nilai - 10). " belas";
-            } else if ($nilai < 100) {
-                $temp = penyebut($nilai/10)." puluh". penyebut($nilai % 10);
-            } else if ($nilai < 200) {
-                $temp = " seratus" . penyebut($nilai - 100);
-            } else if ($nilai < 1000) {
-                $temp = penyebut($nilai/100) . " ratus" . penyebut($nilai % 100);
-            } else if ($nilai < 2000) {
-                $temp = " seribu" . penyebut($nilai - 1000);
-            } else if ($nilai < 1000000) {
-                $temp = penyebut($nilai/1000) . " ribu" . penyebut($nilai % 1000);
-            } else if ($nilai < 1000000000) {
-                $temp = penyebut($nilai/1000000) . " juta" . penyebut($nilai % 1000000);
-            } else if ($nilai < 1000000000000) {
-                $temp = penyebut($nilai/1000000000) . " milyar" . penyebut(fmod($nilai,1000000000));
-            } else if ($nilai < 1000000000000000) {
-                $temp = penyebut($nilai/1000000000000) . " trilyun" . penyebut(fmod($nilai,1000000000000));
+                $temp = ' ' . $huruf[$nilai];
+            } elseif ($nilai < 20) {
+                $temp = penyebut($nilai - 10) . ' belas';
+            } elseif ($nilai < 100) {
+                $temp = penyebut($nilai / 10) . ' puluh' . penyebut($nilai % 10);
+            } elseif ($nilai < 200) {
+                $temp = ' seratus' . penyebut($nilai - 100);
+            } elseif ($nilai < 1000) {
+                $temp = penyebut($nilai / 100) . ' ratus' . penyebut($nilai % 100);
+            } elseif ($nilai < 2000) {
+                $temp = ' seribu' . penyebut($nilai - 1000);
+            } elseif ($nilai < 1000000) {
+                $temp = penyebut($nilai / 1000) . ' ribu' . penyebut($nilai % 1000);
+            } elseif ($nilai < 1000000000) {
+                $temp = penyebut($nilai / 1000000) . ' juta' . penyebut($nilai % 1000000);
+            } elseif ($nilai < 1000000000000) {
+                $temp = penyebut($nilai / 1000000000) . ' milyar' . penyebut(fmod($nilai, 1000000000));
+            } elseif ($nilai < 1000000000000000) {
+                $temp = penyebut($nilai / 1000000000000) . ' trilyun' . penyebut(fmod($nilai, 1000000000000));
             }
             return $temp;
         }
 
-        function terbilang($nilai) {
-            if($nilai<0) {
-                $hasil = "minus ". trim(penyebut($nilai));
+        function terbilang($nilai)
+        {
+            if ($nilai < 0) {
+                $hasil = 'minus ' . trim(penyebut($nilai));
             } else {
                 $hasil = trim(penyebut($nilai));
             }
             return $hasil;
         }
     @endphp
-    <img src="{{ url('/assets/img/template-invoice-alulum.png') }}" style="width: 21cm; height: 14cm;display:none;" alt="">
+    <img src="{{ url('/assets/img/template-invoice-alulum.png') }}" style="width: 21cm; height: 14cm;display:none;"
+        alt="">
     <p class="noBukti">{{ $data->no_bukti }}</p>
     <p class="nis">{{ $data->nis }}</p>
     <p class="nama">{{ $student->nama }}</p>
@@ -231,29 +242,29 @@
     <p class="detail">
         @if ($data->schoolDevFee->count() > 0)
             Pembangunan : @currency($data->jumlah_up)
-            <br/>
+            <br />
         @elseif ($data->jumlah_up > 0)
             Pembangunan : @currency($data->jumlah_up)
-            <br/>
+            <br />
         @endif
-        @if ($data->schoolFee->count() >0)
+        @if ($data->schoolFee->count() > 0)
             Uang Sekolah &nbsp; : @currency($uang_sekolah)
-            <br/>
+            <br />
         @elseif ($data->jumlah_us)
             Uang Sekolah : @currency($data->jumlah_us)
-            <br/>
+            <br />
         @endif
         @if ($data->discounts->count() > 0)
             @foreach ($data->discounts as $item)
-                Potongan {{$item->discount->nama}} ({{$item->discount->besaran}}%)  &nbsp; : @currency($item->total)<br>
+                Potongan {{ $item->discount->nama }} ({{ $item->discount->besaran }}%) &nbsp; : @currency($item->total)<br>
             @endforeach
         @elseif ($data->jumlah_potongan > 0)
             Potongan : @currency($data->jumlah_potongan)
-            <br/>
+            <br />
         @endif
         @if ($data->otherTransactions->count() > 0)
             @foreach ($data->otherTransactions as $item)
-                {{$item->keterangan}} &nbsp; : @currency($item->total)<br>
+                {{ $item->keterangan }} &nbsp; : @currency($item->total)<br>
             @endforeach
         @elseif ($data->jumlah_lainnya > 0)
             Lain-lain : @currency($data->jumlah_lainnya)
@@ -263,4 +274,5 @@
     <p class="tanggal-invoice">{{ \Carbon\Carbon::now()->format('d F Y') }}</p>
     <p class="admin">{{ $data->user->name }}</p>
 </body>
+
 </html>
