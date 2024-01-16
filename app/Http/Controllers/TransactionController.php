@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendMessageJob;
 use App\Models\Discount;
 use App\Models\DiscountStudent;
 use App\Models\DiscountTransaction;
@@ -557,27 +558,33 @@ Tanggal Pembayaran: ' . date('d/m/Y', strtotime($transaction->tgl_transaksi)) . 
         ';
         $pesan = $pesanUtama . '' . $message->pesan_tambahan;
 
-        $client = new Client();
-        $headers = [
-            'Content-Type' => 'application/x-www-form-urlencoded'
-        ];
-        $options = [
-            'form_params' => [
-                'api_key' => $message->api_key,
-                'sender' => $message->sender,
-                'number' => $telp,
-                'message' => $pesan
-            ]
-        ];
-        $endPoint = new GuzzleHttpRequest('POST', env('WHATSAPP_ENDPOINT') . '/send-message', $headers);
-        $res = $client->sendAsync($endPoint, $options)->wait();
-        $response = json_decode($res->getBody());
+        // send to jobs
+        $data = ['telp' => $telp, 'pesan' => $pesan];
+        dispatch(new SendMessageJob($data));
 
-        if ($response->msg == true) {
-            return 'Pesan notifikasi berhasil dikirim';
-        } else {
-            return 'Pesan notifikasi gagal dikirim';
-        }
+        return true;
+
+        // $client = new Client();
+        // $headers = [
+        //     'Content-Type' => 'application/x-www-form-urlencoded'
+        // ];
+        // $options = [
+        //     'form_params' => [
+        //         'api_key' => $message->api_key,
+        //         'sender' => $message->sender,
+        //         'number' => $telp,
+        //         'message' => $pesan
+        //     ]
+        // ];
+        // $endPoint = new GuzzleHttpRequest('POST', env('WHATSAPP_ENDPOINT') . '/send-message', $headers);
+        // $res = $client->sendAsync($endPoint, $options)->wait();
+        // $response = json_decode($res->getBody());
+
+        // if ($response->msg == true) {
+        //     return 'Pesan notifikasi berhasil dikirim';
+        // } else {
+        //     return 'Pesan notifikasi gagal dikirim';
+        // }
     }
 
     function currency($expression)
