@@ -89,10 +89,10 @@
                               </div>
                           </div>
                        </div>
-                     </div> 
+                     </div>
                 </div>
             </div>
-        
+
             <div class="col-12">
                 <div class="statistics-card card">
                     <h5 class="content-desc">Filter Data</h5>
@@ -132,18 +132,16 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-printer"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                                         Print Resume
                                     </button>
-                            
                                 </form>
                             </div>
                         </div>
-                    
                 </div>
             </div>
             <div class="col-12">
                 <div class="statistics-card">
                     <div id="button-wrapper" class="col-md-6"></div>
                     <div class="table-responsive">
-                        <table id="StudentTable" class="table table-striped" style="width:100%">
+                        <table id="ArrearsTable" class="table table-striped" style="width:100%">
                             <thead>
                                 <tr>
                                     <th>No.</th>
@@ -157,7 +155,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                
+
                             </tbody>
                             <tfoot>
                                 <tr>
@@ -173,10 +171,10 @@
                             </tfoot>
                         </table>
                     </div>
-    
+
                 </div>
             </div>
-    
+
         </div>
     </div>
 
@@ -213,7 +211,7 @@
         <script src="{{ asset('js/highchart/variable-pie.js') }}"></script>
         <script>
             $(document).ready(function () {
-                $('#StudentTable').DataTable({
+                $('#ArrearsTable').DataTable({
                     processing: true,
                     serverSide: true,
                     ajax: {
@@ -236,11 +234,11 @@
                         { data: "tunggakan" },
                         { data: "total" },
                         { data: "action" },
-                    ]	 
+                    ]
                 });
 
             });
-            
+
             Highcharts.chart('ColoumnChart', {
                     chart: {
                         type: 'column'

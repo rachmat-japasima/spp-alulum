@@ -10,7 +10,9 @@ use App\Models\Fee;
 use App\Models\Message;
 use App\Models\OtherTransaction;
 use App\Models\SchoolDevFeeTransaction;
+use App\Models\SchoolEquipmentFeeTransaction;
 use App\Models\SchoolFeeTransaction;
+use App\Models\SchoolMaintenanceFeeTransaction;
 use App\Models\Transaction;
 use App\Models\SchoolYear;
 use Illuminate\Contracts\View\View;
@@ -90,17 +92,23 @@ class TransactionController extends Controller
             if ($successTransactions->count() > 0) {
                 $schoolFee = SchoolFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $schoolDevFee = SchoolDevFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
+                $schoolMaintenanceFee = SchoolMaintenanceFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
+                $schoolEquipmentFee = SchoolEquipmentFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $discounts = DiscountTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $otherTransactions = OtherTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
             } else {
                 $schoolFee = SchoolFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $schoolDevFee = SchoolDevFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
+                $schoolMaintenanceFee = SchoolMaintenanceFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
+                $schoolEquipmentFee = SchoolEquipmentFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $discounts = DiscountTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $otherTransactions = OtherTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
             }
         } else {
             $schoolFee = [];
             $schoolDevFee = [];
+            $schoolMaintenanceFee = [];
+            $schoolEquipmentFee = [];
             $discounts = [];
             $otherTransactions = [];
             $totalTransaksi = 0;
@@ -124,6 +132,8 @@ class TransactionController extends Controller
             'transactions' => $transactions,
             'schoolFee' => $schoolFee,
             'schoolDevFee' => $schoolDevFee,
+            'schoolMaintenanceFee' => $schoolMaintenanceFee,
+            'schoolEquipmentFee' => $schoolEquipmentFee,
             'discounts' => $discounts,
             'otherTransactions' => $otherTransactions,
             'schoolYear' => $schoolYear,
@@ -169,17 +179,23 @@ class TransactionController extends Controller
             if ($successTransactions->count() > 0) {
                 $schoolFee = SchoolFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $schoolDevFee = SchoolDevFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
+                $schoolMaintenanceFee = SchoolMaintenanceFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
+                $schoolEquipmentFee = SchoolEquipmentFeeTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $discounts = DiscountTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
                 $otherTransactions = OtherTransaction::whereBelongsTo($successTransactions)->orderBy('created_at', 'desc')->get();
             } else {
                 $schoolFee = SchoolFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $schoolDevFee = SchoolDevFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
+                $schoolMaintenanceFee = SchoolMaintenanceFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
+                $schoolEquipmentFee = SchoolEquipmentFeeTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $discounts = DiscountTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
                 $otherTransactions = OtherTransaction::whereBelongsTo($transactions)->orderBy('created_at', 'desc')->get();
             }
         } else {
             $schoolFee = [];
             $schoolDevFee = [];
+            $schoolMaintenanceFee = [];
+            $schoolEquipmentFee = [];
             $discounts = [];
             $otherTransactions = [];
             $totalTransaksi = 0;
@@ -200,6 +216,8 @@ class TransactionController extends Controller
             'list_siswa' => $list_siswa,
             'discountStudent' => $discountStudent,
             'schoolFeeAmount' => $schoolFeeAmount,
+            'schoolMaintenanceFee' => $schoolMaintenanceFee,
+            'schoolEquipmentFee' => $schoolEquipmentFee,
             'transactions' => $transactions,
             'schoolFee' => $schoolFee,
             'schoolDevFee' => $schoolDevFee,
@@ -265,6 +283,9 @@ class TransactionController extends Controller
             'id' => ['required', 'integer'],
             'uang_sekolah' => ['required', 'integer'],
             'tingkat' => ['required', 'string'],
+            'uang_pembangunan' => ['numeric', 'min:0'],
+            'uang_pemeliharaan' => ['numeric', 'min:0'],
+            'uang_perlengkapan' => ['numeric', 'min:0'],
         ]);
 
         $student = Student::findorFail($request->id);
@@ -312,16 +333,20 @@ class TransactionController extends Controller
         // potongan
         $percentUS = 0;
         $percentUP = 0;
+        $percentUPP = 0;
         $potUS = 0;
         $potUP = 0;
+        $potUPP = 0;
         if ($request->potongan != null) {
             if (count($request->potongan) > 0) {
                 foreach ($request->potongan as $potongan) {
                     $data_pot = Discount::findorFail($potongan);
                     if ($data_pot->jenis == "Uang Sekolah") {
                         $percentUS += $data_pot->besaran;
-                    } else {
+                    } else if ($data_pot->jenis == "Uang Pembangunan") {
                         $percentUP += $data_pot->besaran;
+                    } else if ($data_pot->jenis == "Uang Pemeliharaan dan Pengembangan") {
+                        $percentUPP += $data_pot->besaran;
                     }
                 }
 
@@ -333,7 +358,12 @@ class TransactionController extends Controller
                 if ($request->pembangunan) {
                     $potUP = ($request->uang_pembangunan * $percentUP) / 100;
                 }
-                $data['jumlah_potongan'] = $potUS + $potUP;
+
+                if ($request->pemeliharaan) {
+                    $potUPP = ($request->uang_pemeliharaan * $percentUPP) / 100;
+                }
+
+                $data['jumlah_potongan'] = $potUS + $potUP + $potUPP;
             } else {
                 $data['jumlah_potongan'] = 0;
             }
@@ -341,12 +371,28 @@ class TransactionController extends Controller
             $data['jumlah_potongan'] = 0;
         }
 
-
+        // uang pembangunan
         if ($request->pembangunan) {
             $uang_pembangunan = $request->uang_pembangunan;
             $data['jumlah_up'] = $uang_pembangunan;
         } else {
             $data['jumlah_up'] = 0;
+        }
+
+        // uang pemeliharaan dan pengembangan
+        if ($request->pemeliharaan) {
+            $uang_pemeliharaan = $request->uang_pemeliharaan;
+            $data['jumlah_upp'] = $uang_pemeliharaan;
+        } else {
+            $data['jumlah_upp'] = 0;
+        }
+
+        //  uang perlengkapan
+        if ($request->perlengkapan) {
+            $uang_perlengkapan = $request->uang_perlengkapan;
+            $data['jumlah_upk'] = $uang_perlengkapan;
+        } else {
+            $data['jumlah_upk'] = 0;
         }
 
         // uang lainnya
@@ -364,7 +410,7 @@ class TransactionController extends Controller
             $data['jumlah_lainnya'] = 0;
         }
 
-        $data['total'] = ($data['jumlah_up'] + $data['jumlah_us'] + $data['jumlah_lainnya']) - $data['jumlah_potongan'];
+        $data['total'] = ($data['jumlah_up'] + $data['jumlah_us'] + $data['jumlah_lainnya'] + $data['jumlah_upp'] + $data['jumlah_upk']) - $data['jumlah_potongan'];
         $data['id_user'] = Auth::user()->id;
         $data['keterangan'] = $request->keterangan;
         $data['status'] = 'Success';
@@ -402,6 +448,7 @@ class TransactionController extends Controller
                 $student->save();
             }
 
+            //  insert to transaksi pembangunan
             if ($request->pembangunan) {
                 $up = $uang_pembangunan;
                 if ($request->potongan != null) {
@@ -424,6 +471,36 @@ class TransactionController extends Controller
                 SchoolDevFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $up, 'keterangan' => $request->pembangunan_ket]);
             }
 
+            // insert to transaksi pemeliharaan dan penegembangan
+            if ($request->pemeliharaan) {
+                $upp = $uang_pemeliharaan;
+                if ($request->potongan != null) {
+                    if (count($request->potongan) > 0) {
+                        if ($percentUPP > 0) {
+                            $upp = $uang_pemeliharaan - (($uang_pemeliharaan * $percentUPP) / 100);
+                        }
+
+                        foreach ($request->potongan as $potongan) {
+                            $data_pot = Discount::findorFail($potongan);
+
+                            if ($data_pot->jenis == 'Uang Pemeliharaan dan Pengembangan') {
+                                $total_pot = ($uang_pemeliharaan * $data_pot->besaran) / 100;
+                                DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+                            }
+                        }
+                    }
+                }
+
+                SchoolMaintenanceFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upp, 'keterangan' => $request->pemeliharaan_ket]);
+            }
+
+            // insert to transaksi perlengkapan
+            if ($request->perlengkapan) {
+                $upk = $uang_perlengkapan;
+                SchoolEquipmentFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upk, 'keterangan' => $request->perlengkapan_ket]);
+            }
+
+            // insert to transaksi lainnya
             if ($request->lainnya) {
                 if (count($request->total_lainnya) > 0) {
                     for ($i = 0; $i <= (count($request->total_lainnya) - 1); $i++) {
@@ -433,7 +510,7 @@ class TransactionController extends Controller
             }
 
             if ($student->telp_ortu != null && $student->telp_ortu != '' && strlen($student->telp_ortu) > 0 && strlen($student->telp_ortu) < 14) {
-                $this->sendMessage($student->telp_ortu, $transaction);
+                // $this->sendMessage($student->telp_ortu, $transaction);
             }
 
             session()->flash(route('transactions.print', $transaction->id));
@@ -536,56 +613,56 @@ class TransactionController extends Controller
         return $listMonths;
     }
 
-    function sendMessage($telp, $transaction)
-    {
-        $message = Message::findOrFail(1);
+    //     function sendMessage($telp, $transaction)
+    //     {
+    //         $message = Message::findOrFail(1);
 
-        $pesanUtama =
-            'Halo ' . $transaction->student->nama . ',
-Selamat! Pembayaran uang sekolah Anda telah berhasil diproses.
+    //         $pesanUtama =
+    //             'Halo ' . $transaction->student->nama . ',
+    // Selamat! Pembayaran uang sekolah Anda telah berhasil diproses.
 
-Rincian Pembayaran :
-Nama Siswa: ' . $transaction->student->nama . '
-Nomor Induk Siswa: ' . $transaction->nis . '
-Kelas: ' . $transaction->student->kelas . '/' . $transaction->student->grup . '
-Uang Sekolah : ' . $this->currency($transaction->jumlah_us) . '(' . $transaction->bulan . ')' . '
-Uang Pembangunan: ' . $this->currency($transaction->jumlah_up) . '
-Uang Lainnya: ' . $this->currency($transaction->jumlah_lainnya) . '
-Potongan: ' . $this->currency($transaction->jumlah_potongan) . '
-*Jumlah Pembayaran: ' . $this->currency($transaction->total) . '*
-Tanggal Pembayaran: ' . date('d/m/Y', strtotime($transaction->tgl_transaksi)) . '
+    // Rincian Pembayaran :
+    // Nama Siswa: ' . $transaction->student->nama . '
+    // Nomor Induk Siswa: ' . $transaction->nis . '
+    // Kelas: ' . $transaction->student->kelas . '/' . $transaction->student->grup . '
+    // Uang Sekolah : ' . $this->currency($transaction->jumlah_us) . '(' . $transaction->bulan . ')' . '
+    // Uang Pembangunan: ' . $this->currency($transaction->jumlah_up) . '
+    // Uang Lainnya: ' . $this->currency($transaction->jumlah_lainnya) . '
+    // Potongan: ' . $this->currency($transaction->jumlah_potongan) . '
+    // *Jumlah Pembayaran: ' . $this->currency($transaction->total) . '*
+    // Tanggal Pembayaran: ' . date('d/m/Y', strtotime($transaction->tgl_transaksi)) . '
 
-        ';
-        $pesan = $pesanUtama . '' . $message->pesan_tambahan;
+    //         ';
+    //         $pesan = $pesanUtama . '' . $message->pesan_tambahan;
 
-        // send to jobs
-        $data = ['telp' => $telp, 'pesan' => $pesan];
-        dispatch(new SendMessageJob($data));
+    //         // send to jobs
+    //         $data = ['telp' => $telp, 'pesan' => $pesan];
+    //         dispatch(new SendMessageJob($data));
 
-        return true;
+    //         return true;
 
-        // $client = new Client();
-        // $headers = [
-        //     'Content-Type' => 'application/x-www-form-urlencoded'
-        // ];
-        // $options = [
-        //     'form_params' => [
-        //         'api_key' => $message->api_key,
-        //         'sender' => $message->sender,
-        //         'number' => $telp,
-        //         'message' => $pesan
-        //     ]
-        // ];
-        // $endPoint = new GuzzleHttpRequest('POST', env('WHATSAPP_ENDPOINT') . '/send-message', $headers);
-        // $res = $client->sendAsync($endPoint, $options)->wait();
-        // $response = json_decode($res->getBody());
+    //         // $client = new Client();
+    //         // $headers = [
+    //         //     'Content-Type' => 'application/x-www-form-urlencoded'
+    //         // ];
+    //         // $options = [
+    //         //     'form_params' => [
+    //         //         'api_key' => $message->api_key,
+    //         //         'sender' => $message->sender,
+    //         //         'number' => $telp,
+    //         //         'message' => $pesan
+    //         //     ]
+    //         // ];
+    //         // $endPoint = new GuzzleHttpRequest('POST', env('WHATSAPP_ENDPOINT') . '/send-message', $headers);
+    //         // $res = $client->sendAsync($endPoint, $options)->wait();
+    //         // $response = json_decode($res->getBody());
 
-        // if ($response->msg == true) {
-        //     return 'Pesan notifikasi berhasil dikirim';
-        // } else {
-        //     return 'Pesan notifikasi gagal dikirim';
-        // }
-    }
+    //         // if ($response->msg == true) {
+    //         //     return 'Pesan notifikasi berhasil dikirim';
+    //         // } else {
+    //         //     return 'Pesan notifikasi gagal dikirim';
+    //         // }
+    //     }
 
     function currency($expression)
     {

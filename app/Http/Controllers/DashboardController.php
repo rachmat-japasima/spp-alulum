@@ -67,62 +67,56 @@ class DashboardController extends Controller
             // 'totalSMA' => $totalSMA
         ]);
     }
-
     public function getData()
     {
-        // $siswa = Student::where('status', 1)->get();
+        $schoolYears = SchoolYear::orderBy('tahun_ajaran')->pluck('tahun_ajaran')->values();
 
-        $schoolYear = SchoolYear::all();
+        $labels = $schoolYears->all();
 
-        $year = [null];
-        $totalRA = [];
-        $totalSD = [];
-        $totalSMP = [];
-        $totalSMA = [];
+        $totalRA  = array_fill(0, count($labels), 0);
+        $totalSD  = array_fill(0, count($labels), 0);
+        $totalSMP = array_fill(0, count($labels), 0);
+        $totalSMA = array_fill(0, count($labels), 0);
 
-        foreach ($schoolYear as $item) {
-            array_push($year, $item->tahun_ajaran);
+        $rows = Transaction::query()
+            ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa')
+            ->where('transaksi.status', 'Success')
+            ->whereIn('transaksi.tahun_ajaran', $labels)
+            ->selectRaw('transaksi.tahun_ajaran as tahun_ajaran, siswa.tingkat as tingkat, SUM(transaksi.total) as total_sum')
+            ->groupBy('transaksi.tahun_ajaran', 'siswa.tingkat')
+            ->get();
 
-            $RATransaksi = Transaction::where('tahun_ajaran', $item->tahun_ajaran)->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', 'RA');
-                })->sum('total');
+        $indexByYear = array_flip($labels);
 
-            array_push($totalRA, intval($RATransaksi));
+        foreach ($rows as $r) {
+            $i = $indexByYear[$r->tahun_ajaran] ?? null;
+            if ($i === null) continue;
 
-            $SDTransaksi = Transaction::where('tahun_ajaran', $item->tahun_ajaran)->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '0');
-                })->sum('total');
+            $sum = (int) $r->total_sum;
 
-            array_push($totalSD, intval($SDTransaksi));
-
-            $SMPTransaksi = Transaction::where('tahun_ajaran', $item->tahun_ajaran)->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '1');
-                })->sum('total');
-
-            array_push($totalSMP, intval($SMPTransaksi));
-
-            $SMATransaksi = Transaction::where('tahun_ajaran', $item->tahun_ajaran)->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '2');
-                })->sum('total');
-
-            array_push($totalSMA, intval($SMATransaksi));
+            if ($r->tingkat === 'RA') $totalRA[$i] = $sum;
+            elseif ($r->tingkat === '0') $totalSD[$i] = $sum;
+            elseif ($r->tingkat === '1') $totalSMP[$i] = $sum;
+            elseif ($r->tingkat === '2') $totalSMA[$i] = $sum;
         }
 
-        $data = [
-            // 'siswa' => $siswa,
-            'year' => $year,
+        // prepend NULL untuk Highcharts
+        array_unshift($labels, null);
+        array_unshift($totalRA, 0);
+        array_unshift($totalSD, 0);
+        array_unshift($totalSMP, 0);
+        array_unshift($totalSMA, 0);
+
+        return response()->json([
+            'year' => $labels,
             'totalRA' => $totalRA,
             'totalSD' => $totalSD,
             'totalSMP' => $totalSMP,
-            'totalSMA' => $totalSMA
-        ];
-
-        return json_encode($data);
+            'totalSMA' => $totalSMA,
+        ]);
     }
+
+
 
     /**
      * Show the form for creating a new resource.

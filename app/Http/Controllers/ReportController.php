@@ -22,89 +22,85 @@ class ReportController extends Controller
      */
     public function daily(Request $request): View
     {
-        $day = date("Y-m-d", strtotime($request->date));
-        $tingkat = $request->tingkat;
-        if ($tingkat == 'full') {
-            $data = Transaction::whereDate('tgl_transaksi', $day)->get();
-            $successTransaksi = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->get();
+        $day = Carbon::parse($request->date)->toDateString();
+        $tingkatFilter = $request->tingkat;
 
-            $RA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
+        // Base query transaksi di hari tsb
+        $base = Transaction::query()
+            ->whereDate('tgl_transaksi', $day)
+            ->with([
+                'student',
+                'schoolFee',       // relasi
+                'schoolDevFee',    // relasi
+                'schoolMaintenanceFee',    // relasi
+                'schoolEquipmentFee',    // relasi
+                'discounts.discount',
+            ]);
 
-            $SD = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count(), 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total'), 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
-        } else {
-            $data = Transaction::whereDate('tgl_transaksi', $day)->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-            $successTransaksi = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', $tingkat);
-                })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0, 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('total') : 0, 'SD' => $tingkat == '0' ? $SD->sum('total') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('total') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('total') : 0, 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
 
+        // Semua transaksi (success + failed) untuk table
+        $data = (clone $base)->get();
+
+        // hanya transaksi sukses
+        $successTransaksi = (clone $base)->where('status', 'Success')->get();
+
+        // Grouping per tingkat dari transaksi sukses (tanpa query RA/SD/SMP/SMA berulang)
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        // Hitung total US/UP & potongan (tanpa N+1 karena sudah eager load)
         $totalUS = 0;
         $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
         $totalPotUS = 0;
         $totalPotUP = 0;
-        foreach ($successTransaksi as $item) {
-            $totalUS += $item->schoolFee->sum('total');
-            $totalUP += $item->schoolDevFee->sum('total');
+        $totalPotUPP = 0;
 
-            if ($item->discounts->count() > 0) {
-                foreach ($item->discounts as $disc) {
-                    if ($disc->discount->jenis == 'Uang Sekolah') {
-                        $totalPotUS += $disc->total;
-                    } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
-                        $totalPotUP += $disc->total;
-                    }
+        foreach ($successTransaksi as $trx) {
+            $totalUS += $trx->schoolFee->sum('total');
+            $totalUP += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') {
+                    $totalPotUS += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pembangunan') {
+                    $totalPotUP += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') {
+                    $totalPotUPP += (int) $disc->total;
                 }
             }
         }
 
         $totalTransaksi = $successTransaksi->sum('total');
-        $filters = (object)['tingkat' => $request->tingkat, 'date' => $request->date];
 
-        return view('pages.report.daily', ([
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'date' => $request->date,
+        ];
+
+        return view('pages.report.daily', [
             'data' => $data,
             'totalTransaksi' => $totalTransaksi,
             'filters' => $filters,
@@ -114,28 +110,198 @@ class ReportController extends Controller
             'total_potongan_us' => $totalPotUS,
             'total_uang_pembangunan' => $totalUP,
             'total_potongan_up' => $totalPotUP,
-        ]));
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
+        ]);
     }
+
 
     /**
      * Show the data transaction for monthly.
      */
     public function monthly(Request $request)
     {
-        $filters = (object)['tingkat' => $request->tingkat, 'date' => $request->date];
+        // request->date dari <input type="month"> = "YYYY-MM"
+        $dt = Carbon::createFromFormat('Y-m', $request->date);
+        $start = $dt->copy()->startOfMonth()->startOfDay();
+        $end   = $dt->copy()->endOfMonth()->endOfDay();
 
-        return view('pages.report.monthly', ([
+        $tingkatFilter = $request->tingkat;
+
+        $base = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$start, $end])
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
+
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
+        }
+
+        $data = (clone $base)->get();
+        $successTransaksi = (clone $base)->where('status', 'Success')->get();
+
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        $totalUS = 0;
+        $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
+        $totalPotUS = 0;
+        $totalPotUP = 0;
+        $totalPotUPP = 0;
+
+        foreach ($successTransaksi as $trx) {
+            $totalUS  += $trx->schoolFee->sum('total');
+            $totalUP  += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
+            }
+        }
+
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'date' => $request->date, // tetap "YYYY-MM"
+        ];
+
+        return view('pages.report.monthly', [ // sebaiknya beda view, tapi kalau masih pakai daily view silakan
+            'data' => $data,
+            'totalTransaksi' => $successTransaksi->sum('total'),
             'filters' => $filters,
-        ]));
+            'jumlah' => $jumlah,
+            'total' => $total,
+            'total_uang_sekolah' => $totalUS,
+            'total_potongan_us' => $totalPotUS,
+            'total_uang_pembangunan' => $totalUP,
+            'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
+        ]);
     }
+
 
     public function semester(Request $request)
     {
-        $filters = (object)['tingkat' => $request->tingkat, 'date' => $request->date, 'semester' => $request->semester];
+        $year = (int) $request->date;
+        $semester = $request->semester;
+        $tingkatFilter = $request->tingkat;
 
-        return view('pages.report.semester', ([
+        if ($semester === 'Ganjil') {
+            $start = Carbon::create($year, 1, 1)->startOfDay();
+            $end   = Carbon::create($year, 6, 30)->endOfDay();
+        } else { // Genap
+            $start = Carbon::create($year, 7, 1)->startOfDay();
+            $end   = Carbon::create($year, 12, 31)->endOfDay();
+        }
+
+        $base = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$start, $end])
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
+
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
+        }
+
+        $data = (clone $base)->get();
+        $successTransaksi = (clone $base)->where('status', 'Success')->get();
+
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        $totalUS = 0;
+        $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
+        $totalPotUS = 0;
+        $totalPotUP = 0;
+        $totalPotUPP = 0;
+
+        foreach ($successTransaksi as $trx) {
+            $totalUS  += $trx->schoolFee->sum('total');
+            $totalUP  += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
+            }
+        }
+
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'date' => (string)$year,
+            'semester' => $semester,
+        ];
+
+        // view boleh tetap monthly kalau layout sama
+        return view('pages.report.semester', [
+            'data' => $data,
+            'totalTransaksi' => $successTransaksi->sum('total'),
             'filters' => $filters,
-        ]));
+            'jumlah' => $jumlah,
+            'total' => $total,
+            'total_uang_sekolah' => $totalUS,
+            'total_potongan_us' => $totalPotUS,
+            'total_uang_pembangunan' => $totalUP,
+            'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
+        ]);
     }
 
     /**
@@ -143,29 +309,168 @@ class ReportController extends Controller
      */
     public function yearly(Request $request)
     {
+        $year = (int) $request->date;
+        $tingkatFilter = $request->tingkat;
 
-        $filters = (object)['tingkat' => $request->tingkat, 'date' => $request->date];
+        $base = Transaction::query()
+            ->whereYear('tgl_transaksi', $year)
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
 
-        return view('pages.report.yearly', ([
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
+        }
+
+        $data = (clone $base)->get();
+        $successTransaksi = (clone $base)->where('status', 'Success')->get();
+
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        $totalUS = $totalUP = $totalUPP = $totalUPK = 0;
+        $totalPotUS = $totalPotUP = $totalPotUPP = 0;
+
+        foreach ($successTransaksi as $trx) {
+            $totalUS  += $trx->schoolFee->sum('total');
+            $totalUP  += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
+            }
+        }
+
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'date' => (string) $year,
+        ];
+
+        return view('pages.report.yearly', [
+            'data' => $data,
+            'totalTransaksi' => $successTransaksi->sum('total'),
             'filters' => $filters,
-        ]));
+            'jumlah' => $jumlah,
+            'total' => $total,
+            'total_uang_sekolah' => $totalUS,
+            'total_potongan_us' => $totalPotUS,
+            'total_uang_pembangunan' => $totalUP,
+            'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
+        ]);
     }
+
 
     /**
      * Display the specified resource.
      */
     public function schoolYear(Request $request)
     {
-        $filters = (object)['tingkat' => $request->tingkat, 'date' => $request->date];
+        $tahunAjaran = $request->date;      // contoh: "2023/2024"
+        $tingkatFilter = $request->tingkat;
+
+        $base = Transaction::query()
+            ->where('tahun_ajaran', $tahunAjaran)
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
+
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
+        }
+
+        $data = (clone $base)->get();
+        $successTransaksi = (clone $base)->where('status', 'Success')->get();
+
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        $totalUS = $totalUP = $totalUPP = $totalUPK = 0;
+        $totalPotUS = $totalPotUP = $totalPotUPP = 0;
+
+        foreach ($successTransaksi as $trx) {
+            $totalUS  += $trx->schoolFee->sum('total');
+            $totalUP  += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
+            }
+        }
+
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'date' => $tahunAjaran,
+        ];
 
         $listSchoolYear = SchoolYear::all();
 
-        return view('pages.report.schoolYear', ([
+        return view('pages.report.schoolYear', [
+            'data' => $data,
+            'totalTransaksi' => $successTransaksi->sum('total'),
             'filters' => $filters,
-            'listSchoolYear' => $listSchoolYear,
-        ]));
+            'jumlah' => $jumlah,
+            'total' => $total,
+            'total_uang_sekolah' => $totalUS,
+            'total_potongan_us' => $totalPotUS,
+            'total_uang_pembangunan' => $totalUP,
+            'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
+            'listSchoolYear' => $listSchoolYear
+        ]);
     }
-
 
     /**
      * Show the form for editing the specified resource.
@@ -174,127 +479,99 @@ class ReportController extends Controller
     {
         $type = $request->type;
         $class = $request->tingkat;
-        if ($type == 'daily') {
-            $day = date("Y-m-d", strtotime($request->date));
-            if ($class == 'full') {
-                $data = Transaction::whereDate('tgl_transaksi', $day)->get();
-            } else {
-                $data = Transaction::whereDate('tgl_transaksi', $day)->whereHas('student', function ($query) use ($class) {
-                    $query->where('tingkat', $class);
-                })->get();
-            }
-        } elseif ($type == 'monthly') {
-            $month = date("m", strtotime($request->date));
-            $year = date("Y", strtotime($request->date));
-            if ($class == 'full') {
-                $data = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->get();
-            } else {
-                $data = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->whereHas('student', function ($query) use ($class) {
-                    $query->where('tingkat', $class);
-                })->get();
-            }
-        } elseif ($type == 'yearly') {
-            if ($class == 'full') {
-                $data = Transaction::whereYear('tgl_transaksi', $request->date)->get();
-            } else {
-                $data = Transaction::whereYear('tgl_transaksi', $request->date)->whereHas('student', function ($query) use ($class) {
-                    $query->where('tingkat', $class);
-                })->get();
-            }
-        } elseif ($type == 'schoolYear') {
-            if ($class == 'full') {
-                $data = Transaction::where('tahun_ajaran', $request->date)->where('no_bukti', '!=', '')->with('student')->get();
-            } else {
-                $data = Transaction::where('tahun_ajaran', $request->date)->whereHas('student', function ($query) use ($class) {
-                    $query->where('tingkat', $class);
-                })->get();
-            }
-        } elseif ($type == 'semester') {
-            $year = $request->date;
-            if ($request->semester == 'Ganjil') {
-                $start = Carbon::parse($year . '-01-01')->format('Y-m-d');
-                $end = Carbon::parse($year . '-06-30')->format('Y-m-d');
-            } else {
-                $start = Carbon::parse($year . '-07-01')->format('Y-m-d');
-                $end = Carbon::parse($year . '-12-31')->format('Y-m-d');
-            }
 
-            if ($class == 'full') {
-                $data = Transaction::whereBetween('tgl_transaksi', [$start, $end])->get();
-            } else {
-                $data = Transaction::whereBetween('tgl_transaksi', [$start, $end])->whereHas('student', function ($query) use ($class) {
-                    $query->where('tingkat', $class);
-                })->get();
-            }
-        } else {
-            $data = Transaction::where('no_bukti', '!=', '')->with('student')->get();
+        $q = Transaction::query()->with('student');
+
+        // filter tingkat (optional)
+        if ($class !== 'full') {
+            $q->whereHas('student', fn($sq) => $sq->where('tingkat', $class));
         }
+
+        // filter berdasarkan type
+        if ($type === 'daily') {
+            $day = Carbon::parse($request->date)->toDateString();
+            $q->whereDate('tgl_transaksi', $day);
+        } elseif ($type === 'monthly') {
+            $dt = Carbon::parse($request->date);
+            $q->whereMonth('tgl_transaksi', $dt->month)
+                ->whereYear('tgl_transaksi', $dt->year);
+        } elseif ($type === 'yearly') {
+            $q->whereYear('tgl_transaksi', $request->date);
+        } elseif ($type === 'schoolYear') {
+            $q->where('tahun_ajaran', $request->date)
+                ->where('no_bukti', '!=', ''); // konsisten
+
+        } elseif ($type === 'semester') {
+            $year = $request->date;
+            if ($request->semester === 'Ganjil') {
+                $start = Carbon::parse($year . '-01-01')->toDateString();
+                $end   = Carbon::parse($year . '-06-30')->toDateString();
+            } else {
+                $start = Carbon::parse($year . '-07-01')->toDateString();
+                $end   = Carbon::parse($year . '-12-31')->toDateString();
+            }
+            $q->whereBetween('tgl_transaksi', [$start, $end]);
+        } else {
+            $q->where('no_bukti', '!=', ''); // seperti kode kamu
+        }
+
+        $data = $q->get();
 
         $dataTable = collect([]);
         $no = 1;
-        foreach ($data as $item) {
-            if ($item->student != null) {
-                $kelas = $item->student->kelas;
-                $name = $item->student->nis . '/' . $item->student->nama;
 
-                if ($item->student->tingkat == '0') {
-                    $tingkat = '<span class="badge bg-danger">SD</span>';
-                } elseif ($item->student->tingkat == '1') {
-                    $tingkat = '<span class="badge bg-primary">SMP</span>';
-                } elseif ($item->student->tingkat == '2') {
-                    $tingkat = '<span class="badge bg-secondary">SMA</span>';
-                } elseif ($item->student->tingkat == 'RA') {
-                    $tingkat = '<span class="badge bg-info">RA</span>';
-                }
+        foreach ($data as $item) {
+            $student = $item->student;
+
+            if ($student) {
+                $kelas = $student->kelas;
+                $name = $student->nis . '/' . $student->nama;
+
+                $t = $student->tingkat;
+                $tingkatBadge =
+                    $t === '0' ? '<span class="badge bg-danger">SD</span>' : ($t === '1' ? '<span class="badge bg-primary">SMP</span>' : ($t === '2' ? '<span class="badge bg-secondary">SMA</span>' : ($t === 'RA' ? '<span class="badge bg-info">RA</span>' : '')));
             } else {
-                $tingkat = '';
+                $tingkatBadge = '';
                 $kelas = '';
                 $name = '';
             }
 
-            if ($item->status == 'Success') {
-                $print = '<a href="' . route('transactions.print', $item->id) . '" class="btn btn-warning btn-sm" title="Cetak" target="_blank">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-printer"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                            </a>';
-            } else {
-                $print = '';
-            }
+            $print = ($item->status === 'Success')
+                ? '<a href="' . route('transactions.print', $item->id) . '" class="btn btn-warning btn-sm" title="Cetak" target="_blank"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-printer"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></a>'
+                : '';
 
-            if ($item->status == 'Success') {
-                $status = '<span class="badge bg-success">Success</span>';
-            } elseif ($item->status == 'Cancel') {
-                $status = '<span class="badge bg-warning">Cancelled</span>';
-            } else {
-                $status = '<span class="badge bg-danger">Failed</span>';
-            }
+            $statusBadge = $item->status === 'Success'
+                ? '<span class="badge bg-success">Success</span>'
+                : ($item->status === 'Cancel'
+                    ? '<span class="badge bg-warning">Cancelled</span>'
+                    : '<span class="badge bg-danger">Failed</span>');
 
-            $tanggal = \Carbon\Carbon::parse($item->tgl_transaksi)->format('d M Y');
+            $tanggal = Carbon::parse($item->tgl_transaksi)->format('d M Y');
             $total = $this->currency($item->total);
-            $no_bukti = '<a href="' . route('transactions.details', $item->id) . '" class="btn btn-success btn-sm d-flex w-100" data-bs-toggle="tooltip" data-bs-placement="top" title="Detail">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>    
-                                ' . $item->no_bukti . '
-                            </a>';
+
+            $noBuktiText = $item->no_bukti ?? '-';
+            $no_bukti = '<a href="' . route('transactions.details', $item->id) . '" class="btn btn-success btn-sm d-flex w-100" title="Detail"><svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>   ' . $noBuktiText . '</a>';
 
             $dataTable->push([
                 'no' => $no,
                 'no_bukti' => $no_bukti,
                 'name' => $name,
-                'tingkat' => $tingkat,
+                'tingkat' => $tingkatBadge,
                 'kelas' => $kelas,
                 'tanggal' => $tanggal,
                 'tahun_ajaran' => $item->tahun_ajaran,
                 'total' => $total,
-                'status' => $status,
+                'status' => $statusBadge,
                 'metode' => $item->jenis,
-                'print' => $print
+                'print' => $print,
             ]);
+
             $no++;
         }
 
-        // dd($dataTable);
-
         return DataTables::of($dataTable)->escapeColumns([])->toJson();
     }
+
 
     function currency($expression)
     {
@@ -309,7 +586,6 @@ class ReportController extends Controller
         $tingkat = $request->tingkat;
         $month = $request->date;
 
-        // dd($month);
         if ($tingkat == 'full') {
             $data = Student::where('status', 1)->whereNotNull('bulan_spp_terakhir')->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->get();
         } else {
@@ -319,8 +595,10 @@ class ReportController extends Controller
         $jumlah = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0,];
         $total = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0];
 
+        $fees = Fee::get()->keyBy('tahun_angkatan');
+
         foreach ($data as $item) {
-            $schoolFeeAmount = Fee::where('tahun_angkatan', $item->tahun_angkatan)->first();
+            $schoolFeeAmount = $fees->get($item->tahun_angkatan);
 
             if ($item->kelas == 'RA') {
                 $kelasFee = 'ra';
@@ -328,9 +606,11 @@ class ReportController extends Controller
                 $kelasFee = 'kelas_' . $item->kelas;
             }
 
-            if ($item->bulan_spp_terakhir != null && $item->bulan_spp_terakhir != 0 && Carbon::parse($item->bulan_spp_terakhir)->format('m') != Carbon::now()->format('m')) {
+            $monthlyFee = $schoolFeeAmount ? intval($schoolFeeAmount[$kelasFee] ?? 0) : 0;
+
+            if ($item->bulan_spp_terakhir != null && $item->bulan_spp_terakhir != 0 && Carbon::parse($item->bulan_spp_terakhir)->format('Y-m') != Carbon::now()->format('Y-m')) {
                 $arrears = $this->getArrearsMonths($item->bulan_spp_terakhir);
-                $totalArrears = count($arrears) * intval($schoolFeeAmount[$kelasFee]);
+                $totalArrears = count($arrears) * $monthlyFee;
             } else {
                 $totalArrears = 0;
             }
@@ -357,64 +637,84 @@ class ReportController extends Controller
 
     public function getDataArrears(Request $request)
     {
-        $tingkat = $request->tingkat;
-        $month = $request->date;
+        $tingkatFilter = $request->tingkat;
+
+        $query = Student::where('status', 1)
+            ->whereNotNull('bulan_spp_terakhir')
+            ->whereDate('bulan_spp_terakhir', '<', Carbon::today());
 
 
-        if ($tingkat == 'full') {
-            $data = Student::where('status', 1)->whereNotNull('bulan_spp_terakhir')->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->get();
-        } else {
-            $data = Student::where('status', 1)->whereNotNull('bulan_spp_terakhir')->where('tingkat', $tingkat)->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->get();
+        if ($tingkatFilter !== 'full') {
+            $query->where('tingkat', $tingkatFilter);
         }
+
+        $data = $query->get();
+
+        // preload fee to avoid N+1
+        $angkatanList = $data->pluck('tahun_angkatan')->unique()->values();
+        $feesByAngkatan = Fee::whereIn('tahun_angkatan', $angkatanList)->get()->keyBy('tahun_angkatan');
 
         $dataTable = collect([]);
         $no = 1;
+
         foreach ($data as $item) {
-            $schoolFeeAmount = Fee::where('tahun_angkatan', $item->tahun_angkatan)->first();
+            $feeRow = $feesByAngkatan->get($item->tahun_angkatan);
 
-            if ($item->kelas == 'RA') {
-                $kelasFee = 'ra';
+            $kelasFee = ($item->kelas === 'RA') ? 'ra' : 'kelas_' . $item->kelas;
+
+            $monthlyFee = $feeRow ? (int)($feeRow->{$kelasFee} ?? 0) : 0;
+
+            // badge tingkat (jangan pakai $tingkatFilter)
+            if ($item->tingkat === '0') {
+                $tingkatBadge = '<span class="badge bg-danger">SD</span>';
+            } elseif ($item->tingkat === '1') {
+                $tingkatBadge = '<span class="badge bg-primary">SMP</span>';
+            } elseif ($item->tingkat === '2') {
+                $tingkatBadge = '<span class="badge bg-secondary">SMA</span>';
+            } elseif ($item->tingkat === 'RA') {
+                $tingkatBadge = '<span class="badge bg-info">RA</span>';
             } else {
-                $kelasFee = 'kelas_' . $item->kelas;
+                $tingkatBadge = '';
             }
 
-            if ($item->tingkat == '0') {
-                $tingkat = '<span class="badge bg-danger">SD</span>';
-            } elseif ($item->tingkat == '1') {
-                $tingkat = '<span class="badge bg-primary">SMP</span>';
-            } elseif ($item->tingkat == '2') {
-                $tingkat = '<span class="badge bg-secondary">SMA</span>';
-            } elseif ($item->tingkat == 'RA') {
-                $tingkat = '<span class="badge bg-info">RA</span>';
-            } else {
-                $tingkat = '';
-            }
-
-            $nama = $item->nama . ' ' . $tingkat;
+            $nama = $item->nama . ' ' . $tingkatBadge;
             $kelas = $item->kelas . '/' . $item->grup;
 
-            if ($item->bulan_spp_terakhir != null && $item->bulan_spp_terakhir != 0 && Carbon::parse($item->bulan_spp_terakhir)->format('m') != Carbon::now()->format('m')) {
-                $arrears = $this->getArrearsMonths($item->bulan_spp_terakhir);
-                $bulan = count($arrears) > 1 ? Carbon::parse($arrears[0])->format('M Y') . '-' . Carbon::parse($arrears[count($arrears) - 1])->format('M Y')  : Carbon::parse($arrears[0])->format('M Y');
-                if (count($arrears) == 1) {
-                    $color = 'primary';
-                } elseif (count($arrears) == 2 || count($arrears) < 4) {
-                    $color = 'warning';
-                } elseif (count($arrears) == 4 || count($arrears) < 6) {
-                    $color = 'danger';
-                } elseif (count($arrears) >= 6) {
-                    $color = 'dark';
+            // hitung tunggakan (per hari ini)
+            $totalRaw = 0;
+            if ($item->bulan_spp_terakhir && $monthlyFee > 0) {
+                // FIX compare year-month (optional, tapi aman)
+                if (Carbon::parse($item->bulan_spp_terakhir)->format('Y-m') !== Carbon::now()->format('Y-m')) {
+                    $arrears = $this->getArrearsMonths($item->bulan_spp_terakhir);
+                    $cnt = count($arrears);
+
+                    if ($cnt > 0) {
+                        $bulan = $cnt > 1
+                            ? Carbon::parse($arrears[0])->format('M Y') . '-' . Carbon::parse($arrears[$cnt - 1])->format('M Y')
+                            : Carbon::parse($arrears[0])->format('M Y');
+
+                        // warna by range
+                        if ($cnt === 1) $color = 'primary';
+                        elseif ($cnt <= 3) $color = 'warning';
+                        elseif ($cnt <= 5) $color = 'danger';
+                        else $color = 'dark';
+
+                        $bulantext = '<br/><span class="badge bg-' . $color . '">' . $bulan . '</span>';
+                        $tunggakan = $cnt . ' Bulan ' . $bulantext;
+
+                        $totalRaw = $cnt * $monthlyFee;
+                    } else {
+                        $tunggakan = 'Belum ada transaksi';
+                    }
+                } else {
+                    $tunggakan = 'Belum ada transaksi';
                 }
-                $bulantext = '<br/><span class="badge bg-' . $color . '">' . $bulan . '</span>';
-                $tunggakan = count($arrears) . ' Bulan ' . $bulantext;
-                $total = count($arrears) * intval($schoolFeeAmount[$kelasFee]);
             } else {
                 $tunggakan = 'Belum ada transaksi';
-                $total = 0;
             }
 
 
-            $total = $this->currency($total);
+            $total = $this->currency($totalRaw);
             $btnPay = '<a href="' . route('transactions.show', $item->id) . '" class="btn btn-form"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-credit-card"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg> Bayar</a>';
 
             $dataTable->push([
@@ -427,6 +727,7 @@ class ReportController extends Controller
                 'total' => $total,
                 'action' => $btnPay
             ]);
+
             $no++;
         }
 
@@ -438,78 +739,121 @@ class ReportController extends Controller
     public function arrearsPrint(Request $request)
     {
         $tingkat = $request->tingkat;
-        $month = $request->date;
+        $month = $request->date; // tidak dipakai, tapi tetap dikirim ke view
 
-        // $TA = SchoolYear::latest()->first();
-        $students = Student::where('status', 1)
+        // base query (per hari ini)
+        $baseQuery = Student::where('status', 1)
             ->whereNotNull('bulan_spp_terakhir')
-            ->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->OrderBy('tingkat', 'asc')
-            ->OrderBy('kelas', 'asc')
-            ->with('transactions')
-            ->get();
+            ->whereDate('bulan_spp_terakhir', '<', Carbon::today())
+            ->orderBy('tingkat', 'asc')
+            ->orderBy('kelas', 'asc')
+            ->with('transactions');
 
-        // dd($month);
-        if ($tingkat == 'full') {
-            $data = Student::where('status', 1)->whereNotNull('bulan_spp_terakhir')->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->OrderBy('tingkat', 'asc')->OrderBy('kelas', 'asc')->get();
-        } else {
-            $data = Student::where('status', 1)->whereNotNull('bulan_spp_terakhir')->where('tingkat', $tingkat)->where('bulan_spp_terakhir', '<', Carbon::now()->format('Y-m-d'))->OrderBy('tingkat', 'asc')->OrderBy('kelas', 'asc')->get();
+        if ($tingkat !== 'full') {
+            $baseQuery->where('tingkat', $tingkat);
         }
 
-        $transactionsRA = Transaction::whereBelongsTo($students->where('tingkat', 'RA'))->where('status', 'Success')->sum('jumlah_us');
-        $transactionsSD = Transaction::whereBelongsTo($students->where('tingkat', '0'))->where('status', 'Success')->sum('jumlah_us');
-        $transactionsSMP = Transaction::whereBelongsTo($students->where('tingkat', '1'))->where('status', 'Success')->sum('jumlah_us');
-        $transactionsSMA = Transaction::whereBelongsTo($students->where('tingkat', '2'))->where('status', 'Success')->sum('jumlah_us');
+        // data utama untuk print
+        $data = $baseQuery->get();
 
-        $jumlah = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0,];
-        $total = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0];
-        $siswa = (object)['RA' => $students->where('tingkat', 'RA')->count(), 'SD' => $students->where('tingkat', '0')->count(), 'SMP' => $students->where('tingkat', '1')->count(), 'SMA' => $students->where('tingkat', '2')->count()];
-        $totalUS = (object)['RA' => $transactionsRA, 'SD' => $transactionsSD, 'SMP' => $transactionsSMP, 'SMA' => $transactionsSMA];
+        // dipakai untuk statistik (konsisten dengan filter)
+        $students = $data;
 
-        foreach ($students as $key => $item) {
-            $schoolFeeAmount = Fee::where('tahun_angkatan', $item->tahun_angkatan)->first();
+        // preload Fee biar tidak N+1
+        $angkatanList = $data->pluck('tahun_angkatan')->unique()->values();
+        $feesByAngkatan = Fee::whereIn('tahun_angkatan', $angkatanList)->get()->keyBy('tahun_angkatan');
 
-            if ($item->kelas == 'RA') {
-                $kelasFee = 'ra';
-            } else {
-                $kelasFee = 'kelas_' . $item->kelas;
-            }
+        // total US: ambil student_id list, sum langsung di transaksi (lebih aman daripada whereBelongsTo koleksi)
+        $studentIds = $students->pluck('id')->all();
 
-            if ($item->bulan_spp_terakhir != null && $item->bulan_spp_terakhir != 0 && Carbon::parse($item->bulan_spp_terakhir)->format('m') != Carbon::now()->format('m')) {
-                if (is_null($item->bulan_spp_terakhir) === false) {
+        $transactionsRA  = Transaction::whereIn('id_siswa', $studentIds)->where('status', 'Success')
+            ->whereHas('student', fn($q) => $q->where('tingkat', 'RA'))
+            ->sum('jumlah_us');
+
+        $transactionsSD  = Transaction::whereIn('id_siswa', $studentIds)->where('status', 'Success')
+            ->whereHas('student', fn($q) => $q->where('tingkat', '0'))
+            ->sum('jumlah_us');
+
+        $transactionsSMP = Transaction::whereIn('id_siswa', $studentIds)->where('status', 'Success')
+            ->whereHas('student', fn($q) => $q->where('tingkat', '1'))
+            ->sum('jumlah_us');
+
+        $transactionsSMA = Transaction::whereIn('id_siswa', $studentIds)->where('status', 'Success')
+            ->whereHas('student', fn($q) => $q->where('tingkat', '2'))
+            ->sum('jumlah_us');
+
+        $jumlah = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0];
+        $total  = (object)['RA' => 0, 'SD' => 0, 'SMP' => 0, 'SMA' => 0];
+
+        $siswa = (object)[
+            'RA'  => $students->where('tingkat', 'RA')->count(),
+            'SD'  => $students->where('tingkat', '0')->count(),
+            'SMP' => $students->where('tingkat', '1')->count(),
+            'SMA' => $students->where('tingkat', '2')->count(),
+        ];
+
+        $totalUS = (object)[
+            'RA'  => $transactionsRA,
+            'SD'  => $transactionsSD,
+            'SMP' => $transactionsSMP,
+            'SMA' => $transactionsSMA,
+        ];
+
+        foreach ($data as $key => $item) {
+            $feeRow = $feesByAngkatan->get($item->tahun_angkatan); // bisa null
+
+            $kelasFee = ($item->kelas === 'RA') ? 'ra' : 'kelas_' . $item->kelas;
+
+            $uangSekolah = $feeRow ? (int)($feeRow->{$kelasFee} ?? 0) : 0;
+
+            // hitung arrears (fix year-month)
+            $totalArrears = 0;
+            $bulan = '-';
+            $jumlahBulan = 0;
+
+            if ($item->bulan_spp_terakhir && $uangSekolah > 0) {
+                // optional: bandingkan Y-m supaya tidak ke-skip beda tahun
+                if (Carbon::parse($item->bulan_spp_terakhir)->format('Y-m') !== Carbon::now()->format('Y-m')) {
                     $arrears = $this->getArrearsMonths($item->bulan_spp_terakhir);
-                    $totalArrears = count($arrears) * intval($schoolFeeAmount[$kelasFee]);
-                    $bulan = count($arrears) > 1 ? Carbon::parse($arrears[0])->format('M Y') . '-' . Carbon::parse($arrears[count($arrears) - 1])->format('M Y')  : Carbon::parse($arrears[0])->format('M Y');
                     $jumlahBulan = count($arrears);
+
+                    if ($jumlahBulan > 0) {
+                        $totalArrears = $jumlahBulan * $uangSekolah;
+                        $bulan = $jumlahBulan > 1
+                            ? Carbon::parse($arrears[0])->format('M Y') . '-' . Carbon::parse($arrears[$jumlahBulan - 1])->format('M Y')
+                            : Carbon::parse($arrears[0])->format('M Y');
+                    }
                 }
-            } else {
-                $totalArrears = 0;
-                $bulan = '-';
-                $jumlahBulan = 0;
             }
 
-            $jumlah_up = $item->transactions->where('status', 'Success')->sum('jumlah_up');
+            $jumlah_up_paid = $item->transactions->where('status', 'Success')->sum('jumlah_up');
 
-            $data[$key]['uang_sekolah'] = intval($schoolFeeAmount[$kelasFee]);
+            // inject tambahan field untuk view
+            $data[$key]['uang_sekolah'] = $uangSekolah;
             $data[$key]['bulan'] = $bulan;
             $data[$key]['total_tunggakan'] = $totalArrears;
             $data[$key]['jumlah_bulan'] = $jumlahBulan;
 
-            if ($item->tingkat == '0') {
+            if ($item->tingkat === '0') {
                 $jumlah->SD += 1;
                 $total->SD += $totalArrears;
-                $data[$key]['jumlah_up'] = intval($schoolFeeAmount['pembangunan_sd']) - $jumlah_up;
-            } elseif ($item->tingkat == '1') {
+                $pembangunan = $feeRow ? (int)($feeRow->pembangunan_sd ?? 0) : 0;
+                $data[$key]['jumlah_up'] = $pembangunan - $jumlah_up_paid;
+            } elseif ($item->tingkat === '1') {
                 $jumlah->SMP += 1;
                 $total->SMP += $totalArrears;
-                $data[$key]['jumlah_up'] =  intval($schoolFeeAmount['pembangunan_smp']) -  $jumlah_up;
-            } elseif ($item->tingkat == '2') {
+                $pembangunan = $feeRow ? (int)($feeRow->pembangunan_smp ?? 0) : 0;
+                $data[$key]['jumlah_up'] = $pembangunan - $jumlah_up_paid;
+            } elseif ($item->tingkat === '2') {
                 $jumlah->SMA += 1;
                 $total->SMA += $totalArrears;
-                $data[$key]['jumlah_up'] =  intval($schoolFeeAmount['pembangunan_sma']) - $jumlah_up;
-            } elseif ($item->tingkat == 'RA') {
+                $pembangunan = $feeRow ? (int)($feeRow->pembangunan_sma ?? 0) : 0;
+                $data[$key]['jumlah_up'] = $pembangunan - $jumlah_up_paid;
+            } elseif ($item->tingkat === 'RA') {
                 $jumlah->RA += 1;
                 $total->RA += $totalArrears;
-                $data[$key]['jumlah_up'] =  intval($schoolFeeAmount['pembangunan_ra']) - $jumlah_up;
+                $pembangunan = $feeRow ? (int)($feeRow->pembangunan_ra ?? 0) : 0;
+                $data[$key]['jumlah_up'] = $pembangunan - $jumlah_up_paid;
             }
         }
 
@@ -601,155 +945,96 @@ class ReportController extends Controller
     {
         $type = $request->type;
 
-        if ($type == 'daily') {
-            $day = date("Y-m-d", strtotime($request->date));
+        // base transaksi sukses
+        $tx = Transaction::query()
+            ->where('status', 'Success')
+            ->with('student');
 
-            $RA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereDate('tgl_transaksi', $day)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-        } elseif ($type == 'monthly') {
-            $month = date("m", strtotime($request->date));
-            $year = date("Y", strtotime($request->date));
-
-            $RA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })
-                ->get();
-
-            $SMP = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })
-                ->get();
-
-            $SMA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-        } elseif ($type == 'yearly') {
-            $RA = Transaction::whereYear('tgl_transaksi', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereYear('tgl_transaksi', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereYear('tgl_transaksi', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereYear('tgl_transaksi', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-        } elseif ($type == 'schoolYear') {
-            $RA = Transaction::where('tahun_ajaran', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::where('tahun_ajaran', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::where('tahun_ajaran', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::where('tahun_ajaran', $request->date)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-        } elseif ($type == 'semester') {
+        // apply date filter
+        if ($type === 'daily') {
+            $day = Carbon::parse($request->date)->toDateString();
+            $tx->whereDate('tgl_transaksi', $day);
+        } elseif ($type === 'monthly') {
+            $dt = Carbon::parse($request->date);
+            $tx->whereMonth('tgl_transaksi', $dt->month)->whereYear('tgl_transaksi', $dt->year);
+        } elseif ($type === 'yearly') {
+            $tx->whereYear('tgl_transaksi', $request->date);
+        } elseif ($type === 'schoolYear') {
+            $tx->where('tahun_ajaran', $request->date);
+        } elseif ($type === 'semester') {
             $year = $request->date;
-            if ($request->semester == 'Ganjil') {
-                $start = Carbon::parse($year . '-01-01')->format('Y-m-d');
-                $end = Carbon::parse($year . '-06-30')->format('Y-m-d');
+            if ($request->semester === 'Ganjil') {
+                $start = Carbon::parse($year . '-01-01')->toDateString();
+                $end   = Carbon::parse($year . '-06-30')->toDateString();
             } else {
-                $start = Carbon::parse($year . '-07-01')->format('Y-m-d');
-                $end = Carbon::parse($year . '-12-31')->format('Y-m-d');
+                $start = Carbon::parse($year . '-07-01')->toDateString();
+                $end   = Carbon::parse($year . '-12-31')->toDateString();
             }
-
-            $RA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
+            $tx->whereBetween('tgl_transaksi', [$start, $end]);
         }
 
-        if ($RA->isNotEmpty()) {
-            $potRA = DiscountTransaction::whereBelongsTo($RA)
-                ->select(DB::raw('*, SUM(total) as total_pot'))
-                ->groupBy('id_potongan')
-                ->with(['discount'])
+        $success = $tx->get();
+
+        // group by tingkat
+        $g = $success->groupBy(fn($t) => optional($t->student)->tingkat);
+        $RAc  = $g['RA'] ?? collect();
+        $SDc  = $g['0']  ?? collect();
+        $SMPc = $g['1']  ?? collect();
+        $SMAc = $g['2']  ?? collect();
+
+        $jumlah = (object)[
+            'RA' => $RAc->count(),
+            'SD' => $SDc->count(),
+            'SMP' => $SMPc->count(),
+            'SMA' => $SMAc->count(),
+        ];
+
+        $total = (object)[
+            'RA' => $RAc->sum('total'),
+            'SD' => $SDc->sum('total'),
+            'SMP' => $SMPc->sum('total'),
+            'SMA' => $SMAc->sum('total'),
+        ];
+
+        // summary metode/komponen (pakai collection yang sudah grouped)
+        $RA  = (object)['manualUS' => $RAc->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $RAc->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $RAc->sum('jumlah_up'), 'Pot' => $RAc->sum('jumlah_potongan'), 'Lain' => $RAc->sum('jumlah_lainnya')];
+        $SD  = (object)['manualUS' => $SDc->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SDc->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SDc->sum('jumlah_up'), 'Pot' => $SDc->sum('jumlah_potongan'), 'Lain' => $SDc->sum('jumlah_lainnya')];
+        $SMP = (object)['manualUS' => $SMPc->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SMPc->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SMPc->sum('jumlah_up'), 'Pot' => $SMPc->sum('jumlah_potongan'), 'Lain' => $SMPc->sum('jumlah_lainnya')];
+        $SMA = (object)['manualUS' => $SMAc->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SMAc->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SMAc->sum('jumlah_up'), 'Pot' => $SMAc->sum('jumlah_potongan'), 'Lain' => $SMAc->sum('jumlah_lainnya')];
+
+        // Potongan per tingkat (aggregate SQL aman)
+        $potByTingkat = collect([
+            'RA' => collect(),
+            '0' => collect(),
+            '1' => collect(),
+            '2' => collect()
+        ]);
+
+        if ($success->isNotEmpty()) {
+            $ids = $success->pluck('id')->all();
+
+            $rows = DiscountTransaction::query()
+                ->join('transaksi', 'transaksi.id', '=', 'transaksi_potongan.id_transaksi') // sesuaikan nama table/FK
+                ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa') // sesuaikan FK
+                ->whereIn('transaksi_potongan.id_transaksi', $ids)
+                ->selectRaw('siswa.tingkat as tingkat, transaksi_potongan.id_potongan, SUM(transaksi_potongan.total) as total_pot')
+                ->groupBy('siswa.tingkat', 'transaksi_potongan.id_potongan')
+                ->with('discount')
                 ->get();
-        } else {
-            $potRA = [];
+
+            foreach ($rows as $r) {
+                $potByTingkat[$r->tingkat] = ($potByTingkat[$r->tingkat] ?? collect())->push($r);
+            }
         }
 
-        if ($SD->isNotEmpty()) {
-            $potSD = DiscountTransaction::whereBelongsTo($SD)
-                ->select(DB::raw('*, SUM(total) as total_pot'))
-                ->groupBy('id_potongan')
-                ->with(['discount'])
-                ->get();
-        } else {
-            $potSD = [];
-        }
+        $potRA  = $potByTingkat['RA'] ?? collect();
+        $potSD  = $potByTingkat['0']  ?? collect();
+        $potSMP = $potByTingkat['1']  ?? collect();
+        $potSMA = $potByTingkat['2']  ?? collect();
 
-        if ($SMP->isNotEmpty()) {
-            $potSMP = DiscountTransaction::whereBelongsTo($SMP)
-                ->select(DB::raw('*, SUM(total) as total_pot'))
-                ->groupBy('id_potongan')
-                ->with(['discount'])
-                ->get();
-        } else {
-            $potSMP = [];
-        }
-
-        if ($SMA->isNotEmpty()) {
-            $potSMA = DiscountTransaction::whereBelongsTo($SMA)
-                ->select(DB::raw('*, SUM(total) as total_pot'))
-                ->groupBy('id_potongan')
-                ->with(['discount'])
-                ->get();
-        } else {
-            $potSMA = [];
-        }
-
-        $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count()];
-        $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total')];
-
-        $RA = (object)['manualUS' => $RA->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $RA->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $RA->sum('jumlah_up'), 'Pot' => $RA->sum('jumlah_potongan'), 'Lain' => $RA->sum('jumlah_lainnya')];
-        $SD = (object)['manualUS' => $SD->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SD->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SD->sum('jumlah_up'), 'Pot' => $SD->sum('jumlah_potongan'), 'Lain' => $SD->sum('jumlah_lainnya')];
-        $SMP = (object)['manualUS' => $SMP->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SMP->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SMP->sum('jumlah_up'), 'Pot' => $SMP->sum('jumlah_potongan'), 'Lain' => $SMP->sum('jumlah_lainnya')];
-        $SMA = (object)['manualUS' => $SMA->where('jenis', 'Manual')->sum('jumlah_us'), 'mbankingUS' => $SMA->where('jenis', 'M-Banking')->sum('jumlah_us'), 'UP' => $SMA->sum('jumlah_up'), 'Pot' => $SMA->sum('jumlah_potongan'), 'Lain' => $SMA->sum('jumlah_lainnya')];
-
-        // print($RA);
         $filters = (object)['type' => $request->type, 'date' => $request->date];
-        return view('pages.report.print.daily', ([
+
+        return view('pages.report.print.daily', [
             'filters' => $filters,
             'jumlah' => $jumlah,
             'total' => $total,
@@ -761,176 +1046,158 @@ class ReportController extends Controller
             'potSD' => $potSD,
             'potSMP' => $potSMP,
             'potSMA' => $potSMA,
-        ]));
+        ]);
     }
+
 
     public function discount(Request $request)
     {
         $startDate = $request->startDate;
-        $endDate = $request->endDate;
-        $tingkat = $request->tingkat;
-        $potongan = $request->potongan;
+        $endDate   = $request->endDate;
+        $tingkat   = $request->tingkat;   // 'full' / 'RA' / '0' / '1' / '2'
+        $potongan  = $request->potongan;  // 'full' / id_potongan
 
-        if ($tingkat == 'full') {
-            $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->get();
+        // Base query transaksi sukses
+        $txQuery = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$startDate, $endDate])
+            ->where('status', 'Success')
+            ->with('student'); // biar bisa grouping di memory
 
-            $RA = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count()];
-            $total = (object)['RA' => $RA->sum('jumlah_potongan'), 'SD' => $SD->sum('jumlah_potongan'), 'SMP' => $SMP->sum('jumlah_potongan'), 'SMA' => $SMA->sum('jumlah_potongan')];
-        } else {
-            $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('jumlah_potongan') : 0, 'SD' => $tingkat == '0' ? $SD->sum('jumlah_potongan') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('jumlah_potongan') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('jumlah_potongan') : 0];
+        if ($tingkat !== 'full') {
+            $txQuery->whereHas('student', fn($q) => $q->where('tingkat', $tingkat));
         }
 
-        $dataPot = [];
+        $data = $txQuery->get();
+
+        // Hitung jumlah & total potongan per tingkat (tanpa query berulang)
+        $grouped = $data->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('jumlah_potongan'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('jumlah_potongan'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('jumlah_potongan'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('jumlah_potongan'),
+        ];
+
+        // Potongan summary (lebih aman & efisien)
+        $dataPot = collect();
         if ($data->isNotEmpty()) {
-            if ($potongan != 'full') {
-                $dataPot = DiscountTransaction::whereBelongsTo($data)
-                    ->where('id_potongan', $potongan)
-                    ->select(DB::raw('*, SUM(total) as total_pot'))
-                    ->groupBy('id_potongan')
-                    ->with(['discount'])
-                    ->get();
-            } else {
-                $dataPot = DiscountTransaction::whereBelongsTo($data)
-                    ->select(DB::raw('*, SUM(total) as total_pot'))
-                    ->groupBy('id_potongan')
-                    ->with(['discount'])
-                    ->get();
+            $dataPotQuery = DiscountTransaction::query()
+                ->select([
+                    'id_potongan',
+                    DB::raw('SUM(total) as total_pot'),
+                ])
+                ->with('discount')
+                ->whereHas('transaction', function ($q) use ($startDate, $endDate, $tingkat) {
+                    $q->whereBetween('tgl_transaksi', [$startDate, $endDate])
+                        ->where('status', 'Success');
+
+                    if ($tingkat !== 'full') {
+                        $q->whereHas('student', fn($sq) => $sq->where('tingkat', $tingkat));
+                    }
+                })
+                ->groupBy('id_potongan');
+
+            if ($potongan !== 'full') {
+                $dataPotQuery->where('id_potongan', $potongan);
             }
+
+            $dataPot = $dataPotQuery->get();
         }
 
-        $filters = (object)['tingkat' => $request->tingkat, 'potongan' => $potongan, 'startDate' => $request->startDate, 'endDate' => $request->endDate];
+        $filters = (object)[
+            'tingkat'   => $tingkat,
+            'potongan'  => $potongan,
+            'startDate' => $startDate,
+            'endDate'   => $endDate,
+        ];
 
         $listDiscount = Discount::all();
 
-        return view('pages.report.discount', ([
+        return view('pages.report.discount', [
             'data' => $data,
             'filters' => $filters,
             'jumlah' => $jumlah,
             'total' => $total,
             'listDiscount' => $listDiscount,
             'dataPotongan' => $dataPot,
-        ]));
+        ]);
     }
 
     public function getDataDiscount(Request $request)
     {
         $startDate = $request->startDate;
-        $endDate = $request->endDate;
-        $tingkat = $request->tingkat;
-        $potongan = $request->potongan;
+        $endDate   = $request->endDate;
+        $tingkatFilter = $request->tingkat;
+        $potongan  = $request->potongan;
 
+        $query = DiscountTransaction::query()
+            ->with(['discount', 'transaction.student'])
+            ->whereHas('transaction', function ($q) use ($startDate, $endDate, $tingkatFilter) {
+                $q->whereBetween('tgl_transaksi', [$startDate, $endDate])
+                    ->where('status', 'Success');
 
-        if ($tingkat == 'full') {
-            $dataTransaksi = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->get();
-        } else {
-            $dataTransaksi = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
+                if ($tingkatFilter !== 'full') {
+                    $q->whereHas('student', fn($sq) => $sq->where('tingkat', $tingkatFilter));
+                }
+            });
+
+        if ($potongan !== 'full') {
+            $query->where('id_potongan', $potongan);
         }
 
-        if ($dataTransaksi->isNotEmpty() && $potongan == 'full') {
-            $data = DiscountTransaction::whereBelongsTo($dataTransaksi)
-                ->with(['discount', 'transaction'])
-                ->get();
-        } elseif ($dataTransaksi->isNotEmpty() && $potongan != 'full') {
-            $data = DiscountTransaction::whereBelongsTo($dataTransaksi)
-                ->where('id_potongan', $potongan)
-                ->with(['discount', 'transaction'])
-                ->get();
-        } else {
-            $data = [];
-        }
+        $data = $query->get();
 
         $dataTable = collect([]);
         $no = 1;
+
         foreach ($data as $item) {
-            if ($item->transaction != null) {
-                $student = Student::find($item->transaction->id_siswa);
+            $tx = $item->transaction;
+            $student = $tx?->student;
 
-                $kelas = $student->kelas;
-                $name = $student->nis . '/' . $student->nama;
+            $kelas = $student?->kelas ?? '-';
+            $name  = $student ? ($student->nis . '/' . $student->nama) : '-';
 
-                if ($student->tingkat == '0') {
-                    $tingkat = '<span class="badge bg-danger">SD</span>';
-                } elseif ($student->tingkat == '1') {
-                    $tingkat = '<span class="badge bg-primary">SMP</span>';
-                } elseif ($student->tingkat == '2') {
-                    $tingkat = '<span class="badge bg-secondary">SMA</span>';
-                } elseif ($student->tingkat == 'RA') {
-                    $tingkat = '<span class="badge bg-info">RA</span>';
-                }
-            } else {
-                $tingkat = '';
-                $kelas = '';
-                $name = '';
-            }
+            // badge tingkat
+            $tingkatBadge = '';
+            $t = $student?->tingkat;
+            if ($t === '0') $tingkatBadge = '<span class="badge bg-danger">SD</span>';
+            elseif ($t === '1') $tingkatBadge = '<span class="badge bg-primary">SMP</span>';
+            elseif ($t === '2') $tingkatBadge = '<span class="badge bg-secondary">SMA</span>';
+            elseif ($t === 'RA') $tingkatBadge = '<span class="badge bg-info">RA</span>';
 
-            $tanggal = \Carbon\Carbon::parse($item->transaction->tgl_transaksi)->format('d M Y');
-            $total = $this->currency($item->total);
-            $no_bukti = '<a href="' . route('transactions.details', $item->transaction->id) . '" class="btn btn-success btn-sm d-flex w-100" data-bs-toggle="tooltip" data-bs-placement="top" title="Detail">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>    
-                                ' . $item->transaction->no_bukti . '
-                            </a>';
+            $tanggal = $tx?->tgl_transaksi
+                ? Carbon::parse($tx->tgl_transaksi)->format('d M Y')
+                : '-';
+
+            $total = $this->currency((int)($item->total ?? 0));
+
+            $noBuktiText = $tx?->no_bukti ?? '-';
+            $noBuktiLink = $tx
+                ? '<a href="' . route('transactions.details', $tx->id) . '" class="btn btn-success btn-sm d-flex w-100" title="Detail"><svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>' . $noBuktiText . '</a>'
+                : $noBuktiText;
 
             $dataTable->push([
                 'no' => $no,
-                'no_bukti' => $no_bukti,
-                'potongan' => $item->discount->nama,
+                'no_bukti' => $noBuktiLink,
+                'potongan' => $item->discount?->nama ?? '-',
                 'name' => $name,
-                'tingkat' => $tingkat,
+                'tingkat' => $tingkatBadge,
                 'kelas' => $kelas,
                 'tanggal' => $tanggal,
-                'tahun_ajaran' => $item->transaction->tahun_ajaran,
+                'tahun_ajaran' => $tx?->tahun_ajaran ?? '-',
                 'total' => $total,
             ]);
+
             $no++;
         }
-
-        // dd($dataTable);
 
         return DataTables::of($dataTable)->escapeColumns([])->toJson();
     }
@@ -938,261 +1205,215 @@ class ReportController extends Controller
     public function resumeDiscount(Request $request)
     {
         $startDate = $request->startDate;
-        $endDate = $request->endDate;
-        $tingkat = $request->tingkat;
-        $potongan = $request->potongan;
+        $endDate   = $request->endDate;
+        $tingkatFilter = $request->tingkat;
+        $potongan  = $request->potongan;
 
-        if ($tingkat == 'full') {
-            $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->get();
-        } else {
+        // (opsional) transaksi base, kalau view masih butuh $data
+        $txQuery = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$startDate, $endDate])
+            ->where('status', 'Success');
 
-            switch ($tingkat) {
-                case 'RA':
-                    $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $data = Transaction::whereBetween('tgl_transaksi', [$startDate, $endDate])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
+        if ($tingkatFilter !== 'full') {
+            $txQuery->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
 
-        $dataPot = [];
-        $dataTotalPot = [];
-        if ($data->isNotEmpty()) {
-            if ($potongan != 'full') {
-                $dataTotalPot = DiscountTransaction::whereBelongsTo($data)
-                    ->where('id_potongan', $potongan)
-                    ->select(DB::raw('*, SUM(total) as total_pot'))
-                    ->groupBy('id_potongan')
-                    ->with(['discount', 'transaction'])
-                    ->get();
+        $data = $txQuery->get();
 
-                $dataPot = DiscountTransaction::whereBelongsTo($data)
-                    ->where('id_potongan', $potongan)
-                    ->with(['discount', 'transaction'])
-                    ->get();
-            } else {
-                $dataTotalPot = DiscountTransaction::whereBelongsTo($data)
-                    ->select(DB::raw('*, SUM(total) as total_pot'))
-                    ->groupBy('id_potongan')
-                    ->with(['discount', 'transaction'])
-                    ->get();
+        // Data detail potongan (untuk table print)
+        $potQuery = DiscountTransaction::query()
+            ->with(['discount', 'transaction.student'])
+            ->whereHas('transaction', function ($q) use ($startDate, $endDate, $tingkatFilter) {
+                $q->whereBetween('tgl_transaksi', [$startDate, $endDate])
+                    ->where('status', 'Success');
 
-                $dataPot = DiscountTransaction::whereBelongsTo($data)
-                    ->with(['discount', 'transaction'])
-                    ->get();
-            }
+                if ($tingkatFilter !== 'full') {
+                    $q->whereHas('student', fn($sq) => $sq->where('tingkat', $tingkatFilter));
+                }
+            });
+
+        if ($potongan !== 'full') {
+            $potQuery->where('id_potongan', $potongan);
         }
 
+        $dataPot = $potQuery->get();
+
+        // Total per potongan (untuk resume)
+        $totalPotQuery = DiscountTransaction::query()
+            ->select([
+                'id_potongan',
+                DB::raw('SUM(total) as total_pot'),
+            ])
+            ->with('discount')
+            ->whereHas('transaction', function ($q) use ($startDate, $endDate, $tingkatFilter) {
+                $q->whereBetween('tgl_transaksi', [$startDate, $endDate])
+                    ->where('status', 'Success');
+
+                if ($tingkatFilter !== 'full') {
+                    $q->whereHas('student', fn($sq) => $sq->where('tingkat', $tingkatFilter));
+                }
+            })
+            ->groupBy('id_potongan');
+
+        if ($potongan !== 'full') {
+            $totalPotQuery->where('id_potongan', $potongan);
+        }
+
+        $dataTotalPot = $totalPotQuery->get();
+
+        // Build dataTable untuk print
         $dataTable = [];
         $no = 1;
+
         foreach ($dataPot as $item) {
-            if ($item->transaction != null) {
-                $student = Student::find($item->transaction->id_siswa);
+            $tx = $item->transaction;
+            $student = $tx?->student;
 
-                $kelas = $student->kelas;
-                $name = $student->nis . '/' . $student->nama;
+            $kelas = $student?->kelas ?? '-';
+            $name  = $student ? ($student->nis . '/' . $student->nama) : '-';
 
-                if ($student->tingkat == '0') {
-                    $tingkat = 'SD';
-                } elseif ($student->tingkat == '1') {
-                    $tingkat = 'SMP';
-                } elseif ($student->tingkat == '2') {
-                    $tingkat = 'SMA';
-                } elseif ($student->tingkat == 'RA') {
-                    $tingkat = 'RA';
-                }
-            } else {
-                $tingkat = '';
-                $kelas = '';
-                $name = '';
-            }
+            $t = $student?->tingkat;
+            $tingkatText = $t === '0' ? 'SD' : ($t === '1' ? 'SMP' : ($t === '2' ? 'SMA' : ($t === 'RA' ? 'RA' : '-')));
 
-            $tanggal = \Carbon\Carbon::parse($item->transaction->tgl_transaksi)->format('d M Y');
-            $total = $this->currency($item->total);
-            $no_bukti = $item->transaction->no_bukti;
+            $tanggal = $tx?->tgl_transaksi ? Carbon::parse($tx->tgl_transaksi)->format('d M Y') : '-';
+            $total   = $this->currency((int)($item->total ?? 0));
+            $no_bukti = $tx?->no_bukti ?? '-';
 
-            $dataTables = [
+            $dataTable[] = [
                 'no' => $no,
                 'no_bukti' => $no_bukti,
-                'potongan' => $item->discount->nama,
+                'potongan' => $item->discount?->nama ?? '-',
                 'name' => $name,
-                'tingkat' => $tingkat,
+                'tingkat' => $tingkatText,
                 'kelas' => $kelas,
                 'tanggal' => $tanggal,
-                'tahun_ajaran' => $item->transaction->tahun_ajaran,
+                'tahun_ajaran' => $tx?->tahun_ajaran ?? '-',
                 'total' => $total,
             ];
-            array_push($dataTable, $dataTables);
+
             $no++;
         }
 
-        $filters = (object)['tingkat' => $request->tingkat, 'potongan' => $potongan, 'startDate' => $request->startDate, 'endDate' => $request->endDate];
+        $filters = (object)[
+            'tingkat' => $tingkatFilter,
+            'potongan' => $potongan,
+            'startDate' => $startDate,
+            'endDate' => $endDate
+        ];
 
-        return view('pages.report.print.discount', ([
+        return view('pages.report.print.discount', [
             'filters' => $filters,
             'data' => $data,
             'dataPotongan' => $dataPot,
             'dataTotalPot' => $dataTotalPot,
             'dataTable' => $dataTable,
-        ]));
+        ]);
     }
+
 
     public function getDiagramDataMonthly(Request $request)
     {
-        $month = date("m", strtotime($request->date));
-        $year = date("Y", strtotime($request->date));
+        $month = (int) date("m", strtotime($request->date)); // request->date format: YYYY-MM
+        $year  = (int) date("Y", strtotime($request->date));
 
-        $tingkat = $request->tingkat;
-        if ($tingkat == 'full') {
-            $data = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->get();
-            $successTransaksi = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->get();
+        $tingkatFilter = $request->tingkat;
 
-            $RA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', 'RA');
-            })->get();
+        $start = Carbon::create($year, $month, 1)->startOfDay();
+        $end   = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
 
-            $SD = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', '0');
-            })->get();
+        // Base query transaksi sukses bulan tsb (untuk statistik & total US/UP/potongan)
+        $successQ = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$start, $end])
+            ->where('status', 'Success')
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
 
-            $SMP = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count(), 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total'), 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
-        } else {
-            $data = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-            $successTransaksi = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::whereMonth('tgl_transaksi', $month)->whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0, 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('total') : 0, 'SD' => $tingkat == '0' ? $SD->sum('total') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('total') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('total') : 0, 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
+        if ($tingkatFilter !== 'full') {
+            $successQ->whereHas('siswa', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
 
+        $successTransaksi = $successQ->get();
+
+        // jumlah & total per tingkat (tanpa query RA/SD/SMP/SMA)
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        // total US/UP & potongan (tanpa N+1 karena with)
         $totalUS = 0;
         $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
         $totalPotUS = 0;
         $totalPotUP = 0;
-        foreach ($successTransaksi as $item) {
-            $totalUS += $item->schoolFee->sum('total');
-            $totalUP += $item->schoolDevFee->sum('total');
+        $totalPotUPP = 0;
+        foreach ($successTransaksi as $trx) {
+            $totalUS += $trx->schoolFee->sum('total');
+            $totalUP += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
 
-            if ($item->discounts->count() > 0) {
-                foreach ($item->discounts as $disc) {
-                    if ($disc->discount->jenis == 'Uang Sekolah') {
-                        $totalPotUS += $disc->total;
-                    } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
-                        $totalPotUP += $disc->total;
-                    }
-                }
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
             }
         }
 
+        // ====== CHART HARIAN (1 query aggregate) ======
+        // hasil: map['YYYY-MM-DD']['RA'|'0'|'1'|'2'] = total_sum
+        $dailyRows = Transaction::query()
+            ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa') // sesuaikan FK jika beda
+            ->whereBetween('transaksi.tgl_transaksi', [$start, $end])
+            ->where('transaksi.status', 'Success')
+            ->whereIn('siswa.tingkat', ['RA', '0', '1', '2'])
+            ->selectRaw('DATE(transaksi.tgl_transaksi) as tgl, siswa.tingkat as tingkat, SUM(transaksi.total) as total_sum')
+            ->groupBy('tgl', 'siswa.tingkat')
+            ->get();
+
+        $map = [];
+        foreach ($dailyRows as $r) {
+            $map[$r->tgl][$r->tingkat] = (int) $r->total_sum;
+        }
+
+        $d = cal_days_in_month(CAL_GREGORIAN, $month, $year);
         $transaksiRA = [];
         $transaksiSD = [];
         $transaksiSMP = [];
         $transaksiSMA = [];
-        $d = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+
         for ($i = 1; $i <= $d; $i++) {
-            $transactions_RA = Transaction::whereDate('tgl_transaksi', $request->date . '-' . $i)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', 'RA');
-                })->sum('total');
-
-            if ($transactions_RA) {
-                array_push($transaksiRA, intval($transactions_RA));
-            } else {
-                array_push($transaksiRA, 0);
-            }
-
-            $transactions_SD = Transaction::whereDate('tgl_transaksi', $request->date . '-' . $i)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '0');
-                })->sum('total');
-
-            if ($transactions_SD) {
-                array_push($transaksiSD, intval($transactions_SD));
-            } else {
-                array_push($transaksiSD, 0);
-            }
-
-            $transactions_SMP = Transaction::whereDate('tgl_transaksi', $request->date . '-' . $i)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '1');
-                })->sum('total');
-
-            if ($transactions_SMP) {
-                array_push($transaksiSMP, intval($transactions_SMP));
-            } else {
-                array_push($transaksiSMP, 0);
-            }
-
-            $transactions_SMA = Transaction::whereDate('tgl_transaksi', $request->date . '-' . $i)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '2');
-                })->sum('total');
-
-            if ($transactions_SMA) {
-                array_push($transaksiSMA, intval($transactions_SMA));
-            } else {
-                array_push($transaksiSMA, 0);
-            }
+            $dateKey = Carbon::create($year, $month, $i)->toDateString();
+            $transaksiRA[]  = $map[$dateKey]['RA'] ?? 0;
+            $transaksiSD[]  = $map[$dateKey]['0']  ?? 0;
+            $transaksiSMP[] = $map[$dateKey]['1']  ?? 0;
+            $transaksiSMA[] = $map[$dateKey]['2']  ?? 0;
         }
-        // dd($transaksi);
 
         $totalTransaksi = $successTransaksi->sum('total');
 
-        $data = [
+        return response()->json([
             'totalTransaksi' => $totalTransaksi,
             'jumlah' => $jumlah,
             'total' => $total,
@@ -1200,504 +1421,401 @@ class ReportController extends Controller
             'total_potongan_us' => $totalPotUS,
             'total_uang_pembangunan' => $totalUP,
             'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
             'transaksiRA' => $transaksiRA,
             'transaksiSD' => $transaksiSD,
             'transaksiSMP' => $transaksiSMP,
             'transaksiSMA' => $transaksiSMA,
-        ];
-
-        return json_encode($data);
+        ]);
     }
+
 
     public function getDiagramDataSemester(Request $request)
     {
+        $year = (int) $request->date;
+        $semester = $request->semester;
+        $tingkatFilter = $request->tingkat;
 
-        $year = $request->date;
-        if ($request->semester == 'Ganjil') {
-            $start = Carbon::parse($year . '-01-01')->format('Y-m-d');
-            $end = Carbon::parse($year . '-06-30')->format('Y-m-d');
-            $i = 1;
-            $max = 6;
-        } else {
-            $start = Carbon::parse($year . '-07-01')->format('Y-m-d');
-            $end = Carbon::parse($year . '-12-31')->format('Y-m-d');
-            $i = 7;
-            $max = 12;
+        // Range semester
+        if ($semester === 'Ganjil') {
+            $startMonth = 1;
+            $endMonth = 6;
+            $start = Carbon::create($year, 1, 1)->startOfDay();
+            $end   = Carbon::create($year, 6, 30)->endOfDay();
+        } else { // Genap
+            $startMonth = 7;
+            $endMonth = 12;
+            $start = Carbon::create($year, 7, 1)->startOfDay();
+            $end   = Carbon::create($year, 12, 31)->endOfDay();
         }
 
-        $tingkat = $request->tingkat;
-        if ($tingkat == 'full') {
-            $data = Transaction::whereBetween('tgl_transaksi', [$start, $end])->get();
-            $successTransaksi = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->get();
+        /**
+         * =========================
+         * SUCCESS TRANSAKSI (base)
+         * =========================
+         */
+        $successQ = Transaction::query()
+            ->whereBetween('tgl_transaksi', [$start, $end])
+            ->where('status', 'Success')
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
 
-            $RA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count(), 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total'), 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
-        } else {
-            $data = Transaction::whereBetween('tgl_transaksi', [$start, $end])->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-            $successTransaksi = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::whereBetween('tgl_transaksi', [$start, $end])->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0, 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('total') : 0, 'SD' => $tingkat == '0' ? $SD->sum('total') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('total') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('total') : 0, 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
+        if ($tingkatFilter !== 'full') {
+            $successQ->whereHas('siswa', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
 
+        $successTransaksi = $successQ->get();
+
+        /**
+         * =========================
+         * JUMLAH & TOTAL per tingkat
+         * =========================
+         */
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        /**
+         * =========================
+         * TOTAL US/UP & POTONGAN
+         * =========================
+         */
         $totalUS = 0;
         $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
         $totalPotUS = 0;
         $totalPotUP = 0;
-        foreach ($successTransaksi as $item) {
-            $totalUS += $item->schoolFee->sum('total');
-            $totalUP += $item->schoolDevFee->sum('total');
+        $totalPotUPP = 0;
 
-            if ($item->discounts->count() > 0) {
-                foreach ($item->discounts as $disc) {
-                    if ($disc->discount->jenis == 'Uang Sekolah') {
-                        $totalPotUS += $disc->total;
-                    } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
-                        $totalPotUP += $disc->total;
-                    }
+        foreach ($successTransaksi as $trx) {
+            $totalUS += $trx->schoolFee->sum('total');
+            $totalUP += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') {
+                    $totalPotUS += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pembangunan') {
+                    $totalPotUP += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') {
+                    $totalPotUPP += (int) $disc->total;
                 }
             }
+        }
+
+        /**
+         * =========================
+         * LINE CHART: SUM per bulan & tingkat (1 query)
+         * =========================
+         *
+         * NOTE:
+         * - sesuaikan join FK kalau bukan transactions.id_siswa
+         */
+        $aggQ = Transaction::query()
+            ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa')
+            ->whereBetween('transaksi.tgl_transaksi', [$start, $end])
+            ->where('transaksi.status', 'Success')
+            ->whereIn('siswa.tingkat', ['RA', '0', '1', '2'])
+            ->selectRaw('MONTH(transaksi.tgl_transaksi) as bulan, siswa.tingkat, SUM(transaksi.total) as total_sum')
+            ->groupBy('bulan', 'siswa.tingkat');
+
+        if ($tingkatFilter !== 'full') {
+            $aggQ->where('siswa.tingkat', $tingkatFilter);
+        }
+
+        $rows = $aggQ->get();
+
+        // mapping [bulan][tingkat] => total
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r->bulan][$r->tingkat] = (int) $r->total_sum;
         }
 
         $transaksiRA = [];
         $transaksiSD = [];
         $transaksiSMP = [];
         $transaksiSMA = [];
-        for ($i; $i <= $max; $i++) {
-            $transactions_RA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', 'RA');
-                })->sum('total');
 
-            if ($transactions_RA) {
-                array_push($transaksiRA, intval($transactions_RA));
-            } else {
-                array_push($transaksiRA, 0);
-            }
-
-            $transactions_SD = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '0');
-                })->sum('total');
-
-            if ($transactions_SD) {
-                array_push($transaksiSD, intval($transactions_SD));
-            } else {
-                array_push($transaksiSD, 0);
-            }
-
-            $transactions_SMP = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '1');
-                })->sum('total');
-
-            if ($transactions_SMP) {
-                array_push($transaksiSMP, intval($transactions_SMP));
-            } else {
-                array_push($transaksiSMP, 0);
-            }
-
-            $transactions_SMA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '2');
-                })->sum('total');
-
-            if ($transactions_SMA) {
-                array_push($transaksiSMA, intval($transactions_SMA));
-            } else {
-                array_push($transaksiSMA, 0);
-            }
+        for ($m = $startMonth; $m <= $endMonth; $m++) {
+            $transaksiRA[]  = $map[$m]['RA'] ?? 0;
+            $transaksiSD[]  = $map[$m]['0']  ?? 0;
+            $transaksiSMP[] = $map[$m]['1']  ?? 0;
+            $transaksiSMA[] = $map[$m]['2']  ?? 0;
         }
-        // dd($transaksi);
 
-        $totalTransaksi = $successTransaksi->sum('total');
-
-        $data = [
-            'data' => $data,
-            'totalTransaksi' => $totalTransaksi,
+        return response()->json([
+            'totalTransaksi' => $successTransaksi->sum('total'),
             'jumlah' => $jumlah,
             'total' => $total,
             'total_uang_sekolah' => $totalUS,
             'total_potongan_us' => $totalPotUS,
             'total_uang_pembangunan' => $totalUP,
             'total_potongan_up' => $totalPotUP,
+            'total_upp' => $totalUPP,
+            'total_potongan_upp' => $totalPotUPP,
+            'total_upk' => $totalUPK,
             'transaksiRA' => $transaksiRA,
             'transaksiSD' => $transaksiSD,
             'transaksiSMP' => $transaksiSMP,
             'transaksiSMA' => $transaksiSMA,
-        ];
-
-        return json_encode($data);
+        ]);
     }
+
 
     public function getDiagramDataYearly(Request $request)
     {
-        $year = $request->date;
+        $year = (int) $request->date;
+        $tingkatFilter = $request->tingkat;
 
-        $tingkat = $request->tingkat;
-        if ($tingkat == 'full') {
-            $data = Transaction::whereYear('tgl_transaksi', $year)->get();
-            $successTransaksi = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->get();
+        // Base untuk transaksi sukses (untuk summary & hitung US/UP/Potongan)
+        $successBase = Transaction::query()
+            ->whereYear('tgl_transaksi', $year)
+            ->where('status', 'Success')
+            ->with([
+                'student',
+                'schoolFee',
+                'schoolDevFee',
+                'schoolMaintenanceFee',
+                'schoolEquipmentFee',
+                'discounts.discount',
+            ]);
 
-            $RA = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count(), 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total'), 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
-        } else {
-            $data = Transaction::whereYear('tgl_transaksi', $year)->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-            $successTransaksi = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::whereYear('tgl_transaksi', $year)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0, 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('total') : 0, 'SD' => $tingkat == '0' ? $SD->sum('total') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('total') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('total') : 0, 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
+        if ($tingkatFilter !== 'full') {
+            $successBase->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
 
+        $successTransaksi = $successBase->get();
+
+        // Group by tingkat (RA / 0 / 1 / 2)
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->count(),
+            'SD'  => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA'  => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD'  => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
+
+        // Hitung US/UP & Potongan (tanpa N+1 karena sudah eager load)
         $totalUS = 0;
         $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
         $totalPotUS = 0;
         $totalPotUP = 0;
-        foreach ($successTransaksi as $item) {
-            $totalUS += $item->schoolFee->sum('total');
-            $totalUP += $item->schoolDevFee->sum('total');
+        $totalPotUPP = 0;
 
-            if ($item->discounts->count() > 0) {
-                foreach ($item->discounts as $disc) {
-                    if ($disc->discount->jenis == 'Uang Sekolah') {
-                        $totalPotUS += $disc->total;
-                    } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
-                        $totalPotUP += $disc->total;
-                    }
+        foreach ($successTransaksi as $trx) {
+            $totalUS += $trx->schoolFee->sum('total');
+            $totalUP += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') {
+                    $totalPotUS += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pembangunan') {
+                    $totalPotUP += (int) $disc->total;
+                } elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') {
+                    $totalPotUPP += (int) $disc->total;
                 }
             }
         }
+
+        /**
+         * Chart bulanan: 1 query agregasi untuk semua tingkat per bulan
+         * (lebih cepat daripada 48 query)
+         */
+        $chartBase = Transaction::query()
+            ->selectRaw("
+            MONTH(tgl_transaksi) as m,
+            SUM(CASE WHEN siswa.tingkat = 'RA' THEN  transaksi.total ELSE 0 END) as ra_total,
+            SUM(CASE WHEN siswa.tingkat = '0'  THEN transaksi.total ELSE 0 END) as sd_total,
+            SUM(CASE WHEN siswa.tingkat = '1'  THEN transaksi.total ELSE 0 END) as smp_total,
+            SUM(CASE WHEN siswa.tingkat = '2'  THEN transaksi.total ELSE 0 END) as sma_total
+        ")
+            ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa')
+            ->whereYear('transaksi.tgl_transaksi', $year)
+            ->where('transaksi.status', 'Success')
+            ->groupBy('m')
+            ->orderBy('m');
+
+        // kalau filter tingkat dipilih, tetap bisa apply di chart juga
+        if ($tingkatFilter !== 'full') {
+            $chartBase->where('siswa.tingkat', $tingkatFilter);
+        }
+
+        $rows = $chartBase->get()->keyBy('m');
 
         $transaksiRA = [];
         $transaksiSD = [];
         $transaksiSMP = [];
         $transaksiSMA = [];
-        for ($i = 1; $i <= 12; $i++) {
-            $transactions_RA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', 'RA');
-                })->sum('total');
 
-            if ($transactions_RA) {
-                array_push($transaksiRA, intval($transactions_RA));
-            } else {
-                array_push($transaksiRA, 0);
-            }
-
-            $transactions_SD = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '0');
-                })->sum('total');
-
-            if ($transactions_SD) {
-                array_push($transaksiSD, intval($transactions_SD));
-            } else {
-                array_push($transaksiSD, 0);
-            }
-
-            $transactions_SMP = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '1');
-                })->sum('total');
-
-            if ($transactions_SMP) {
-                array_push($transaksiSMP, intval($transactions_SMP));
-            } else {
-                array_push($transaksiSMP, 0);
-            }
-
-            $transactions_SMA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->whereYear('tgl_transaksi', $year)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '2');
-                })->sum('total');
-
-            if ($transactions_SMA) {
-                array_push($transaksiSMA, intval($transactions_SMA));
-            } else {
-                array_push($transaksiSMA, 0);
-            }
+        for ($m = 1; $m <= 12; $m++) {
+            $row = $rows->get($m);
+            $transaksiRA[]  = $row ? (int) $row->ra_total  : 0;
+            $transaksiSD[]  = $row ? (int) $row->sd_total  : 0;
+            $transaksiSMP[] = $row ? (int) $row->smp_total : 0;
+            $transaksiSMA[] = $row ? (int) $row->sma_total : 0;
         }
-        // dd($transaksi);
 
-        $totalTransaksi = $successTransaksi->sum('total');
-
-        $data = [
-            'totalTransaksi' => $totalTransaksi,
+        $payload = [
+            'totalTransaksi' => (int) $successTransaksi->sum('total'),
             'jumlah' => $jumlah,
             'total' => $total,
-            'total_uang_sekolah' => $totalUS,
-            'total_potongan_us' => $totalPotUS,
-            'total_uang_pembangunan' => $totalUP,
-            'total_potongan_up' => $totalPotUP,
+            'total_uang_sekolah' => (int) $totalUS,
+            'total_potongan_us' => (int) $totalPotUS,
+            'total_uang_pembangunan' => (int) $totalUP,
+            'total_potongan_up' => (int) $totalPotUP,
             'transaksiRA' => $transaksiRA,
             'transaksiSD' => $transaksiSD,
             'transaksiSMP' => $transaksiSMP,
             'transaksiSMA' => $transaksiSMA,
         ];
 
-        return json_encode($data);
+        return response()->json($payload);
     }
+
 
     public function getDiagramDataSchoolYear(Request $request)
     {
         $schoolYear = $request->date;
+        $tingkatFilter = $request->tingkat;
 
-        $tingkat = $request->tingkat;
-        if ($tingkat == 'full') {
-            $data = Transaction::where('tahun_ajaran', $schoolYear)->get();
-            $successTransaksi = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->get();
+        // ambil transaksi sukses tahun ajaran (dengan relasi untuk hitung US/UP & potongan)
+        $base = Transaction::query()
+            ->where('tahun_ajaran', $schoolYear)
+            ->where('status', 'Success')
+            ->with([
+                'student:id,tingkat',
+                'schoolFee:id_transaksi,total',
+                'schoolDevFee:id_transaksi,total',
+                'schoolMaintenanceFee:id_transaksi,total',
+                'schoolEquipmentFee:id_transaksi,total',
+                'discounts.discount:id,jenis',
+            ]);
 
-            $RA = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', 'RA');
-            })->get();
-
-            $SD = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '0');
-            })->get();
-
-            $SMP = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '1');
-            })->get();
-
-            $SMA = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                $query->where('tingkat', '2');
-            })->get();
-
-            $jumlah = (object)['RA' => $RA->count(), 'SD' => $SD->count(), 'SMP' => $SMP->count(), 'SMA' => $SMA->count(), 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $RA->sum('total'), 'SD' => $SD->sum('total'), 'SMP' => $SMP->sum('total'), 'SMA' => $SMA->sum('total'), 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
-        } else {
-            $data = Transaction::where('tahun_ajaran', $schoolYear)->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-            $successTransaksi = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) use ($tingkat) {
-                $query->where('tingkat', $tingkat);
-            })->get();
-
-            switch ($tingkat) {
-                case 'RA':
-                    $RA = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', 'RA');
-                    })->get();
-                    break;
-                case '0':
-                    $SD = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '0');
-                    })->get();
-                    break;
-                case '1':
-                    $SMP = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '1');
-                    })->get();
-                    break;
-                case '2':
-                    $SMA = Transaction::where('tahun_ajaran', $schoolYear)->where('status', 'Success')->whereHas('student', function ($query) {
-                        $query->where('tingkat', '2');
-                    })->get();
-                    break;
-            }
-
-            $jumlah = (object)['RA' => $tingkat == 'RA' ? $RA->count() : 0, 'SD' => $tingkat == '0' ? $SD->count() : 0, 'SMP' => $tingkat == '1' ? $SMP->count() : 0, 'SMA' => $tingkat == '2' ? $SMA->count() : 0, 'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count()];
-            $total = (object)['RA' => $tingkat == 'RA' ? $RA->sum('total') : 0, 'SD' => $tingkat == '0' ? $SD->sum('total') : 0, 'SMP' => $tingkat == '1' ? $SMP->sum('total') : 0, 'SMA' => $tingkat == '2' ? $SMA->sum('total') : 0, 'lainnya' => $successTransaksi->sum('jumlah_lainnya')];
+        if ($tingkatFilter !== 'full') {
+            $base->whereHas('student', fn($q) => $q->where('tingkat', $tingkatFilter));
         }
+
+        $successTransaksi = $base->get();
+
+        // ===== Summary cards =====
+        $grouped = $successTransaksi->groupBy(fn($t) => optional($t->student)->tingkat);
+
+        $jumlah = (object)[
+            'RA' => ($grouped['RA'] ?? collect())->count(),
+            'SD' => ($grouped['0']  ?? collect())->count(),
+            'SMP' => ($grouped['1']  ?? collect())->count(),
+            'SMA' => ($grouped['2']  ?? collect())->count(),
+            'lainnya' => $successTransaksi->where('jumlah_lainnya', '!=', 0)->count(),
+        ];
+
+        $total = (object)[
+            'RA' => ($grouped['RA'] ?? collect())->sum('total'),
+            'SD' => ($grouped['0']  ?? collect())->sum('total'),
+            'SMP' => ($grouped['1']  ?? collect())->sum('total'),
+            'SMA' => ($grouped['2']  ?? collect())->sum('total'),
+            'lainnya' => $successTransaksi->sum('jumlah_lainnya'),
+        ];
 
         $totalUS = 0;
         $totalUP = 0;
+        $totalUPP = 0;
+        $totalUPK = 0;
         $totalPotUS = 0;
         $totalPotUP = 0;
-        foreach ($successTransaksi as $item) {
-            $totalUS += $item->schoolFee->sum('total');
-            $totalUP += $item->schoolDevFee->sum('total');
+        $totalPotUPP = 0;
 
-            if ($item->discounts->count() > 0) {
-                foreach ($item->discounts as $disc) {
-                    if ($disc->discount->jenis == 'Uang Sekolah') {
-                        $totalPotUS += $disc->total;
-                    } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
-                        $totalPotUP += $disc->total;
-                    }
-                }
+        foreach ($successTransaksi as $trx) {
+            $totalUS += $trx->schoolFee->sum('total');
+            $totalUP += $trx->schoolDevFee->sum('total');
+            $totalUPP += $trx->schoolMaintenanceFee->sum('total');
+            $totalUPK += $trx->schoolEquipmentFee->sum('total');
+
+            foreach ($trx->discounts as $disc) {
+                $jenis = $disc->discount?->jenis;
+                if ($jenis === 'Uang Sekolah') $totalPotUS += (int) $disc->total;
+                elseif ($jenis === 'Uang Pembangunan') $totalPotUP += (int) $disc->total;
+                elseif ($jenis === 'Uang Pemeliharaan dan Pengembangan') $totalPotUPP += (int) $disc->total;
             }
         }
 
-        $transaksiRA = [];
-        $transaksiSD = [];
-        $transaksiSMP = [];
-        $transaksiSMA = [];
+        // ===== Line chart (Jul->Jun) =====
+        // query agregat: SUM(total) group by month + tingkat
+        $raw = Transaction::query()
+            ->selectRaw("MONTH(tgl_transaksi) as m, siswa.tingkat as tingkat, SUM(transaksi.total) as total")
+            ->join('siswa', 'siswa.id', '=', 'transaksi.id_siswa')
+            ->where('transaksi.tahun_ajaran', $schoolYear)
+            ->where('transaksi.status', 'Success')
+            ->when($tingkatFilter !== 'full', fn($q) => $q->where('siswa.tingkat', $tingkatFilter))
+            ->groupBy('m', 'siswa.tingkat')
+            ->get();
+
         $months = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 
-        foreach ($months as $i) {
-            $transactions_RA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->where('tahun_ajaran', $schoolYear)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', 'RA');
-                })->sum('total');
-
-            if ($transactions_RA) {
-                array_push($transaksiRA, intval($transactions_RA));
-            } else {
-                array_push($transaksiRA, 0);
-            }
-
-            $transactions_SD = Transaction::whereMonth('tgl_transaksi', $i)
-                ->where('tahun_ajaran', $schoolYear)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '0');
-                })->sum('total');
-
-            if ($transactions_SD) {
-                array_push($transaksiSD, intval($transactions_SD));
-            } else {
-                array_push($transaksiSD, 0);
-            }
-
-            $transactions_SMP = Transaction::whereMonth('tgl_transaksi', $i)
-                ->where('tahun_ajaran', $schoolYear)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) {
-                    $query->where('tingkat', '1');
-                })->sum('total');
-
-            if ($transactions_SMP) {
-                array_push($transaksiSMP, intval($transactions_SMP));
-            } else {
-                array_push($transaksiSMP, 0);
-            }
-
-            $transactions_SMA = Transaction::whereMonth('tgl_transaksi', $i)
-                ->where('tahun_ajaran', $schoolYear)
-                ->where('status', 'Success')
-                ->whereHas('student', function ($query) use ($tingkat) {
-                    $query->where('tingkat', '2');
-                })->sum('total');
-
-            if ($transactions_SMA) {
-                array_push($transaksiSMA, intval($transactions_SMA));
-            } else {
-                array_push($transaksiSMA, 0);
-            }
+        $map = [];
+        foreach ($raw as $r) {
+            $map[$r->tingkat][$r->m] = (int) $r->total;
         }
-        // dd($transaksi);
 
-        $totalTransaksi = $successTransaksi->sum('total');
+        $transaksiRA  = array_map(fn($m) => $map['RA'][$m] ?? 0, $months);
+        $transaksiSD  = array_map(fn($m) => $map['0'][$m]  ?? 0, $months);
+        $transaksiSMP = array_map(fn($m) => $map['1'][$m]  ?? 0, $months);
+        $transaksiSMA = array_map(fn($m) => $map['2'][$m]  ?? 0, $months);
 
-        $data = [
-            'totalTransaksi' => $totalTransaksi,
+        return response()->json([
+            'totalTransaksi' => (int) $successTransaksi->sum('total'),
             'jumlah' => $jumlah,
             'total' => $total,
-            'total_uang_sekolah' => $totalUS,
-            'total_potongan_us' => $totalPotUS,
-            'total_uang_pembangunan' => $totalUP,
-            'total_potongan_up' => $totalPotUP,
+            'total_uang_sekolah' => (int) $totalUS,
+            'total_potongan_us' => (int) $totalPotUS,
+            'total_uang_pembangunan' => (int) $totalUP,
+            'total_potongan_up' => (int) $totalPotUP,
+            'total_upp' => (int) $totalUPP,
+            'total_potongan_upp' => (int) $totalPotUPP,
+            'total_upk' => (int) $totalUPK,
             'transaksiRA' => $transaksiRA,
             'transaksiSD' => $transaksiSD,
             'transaksiSMP' => $transaksiSMP,
             'transaksiSMA' => $transaksiSMA,
-        ];
-
-        return json_encode($data);
+        ]);
     }
 }

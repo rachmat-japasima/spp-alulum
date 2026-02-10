@@ -25,9 +25,25 @@ class Transaction extends Model
     protected $table = 'transaksi';
 
     protected $fillable = [
-        'no_bukti', 'id_siswa', 'tahun_ajaran', 'nis', 'tingkat', 'tgl_transaksi',
-        'jumlah_bulan', 'bulan', 'jumlah_up', 'jumlah_us', 'jumlah_potongan',
-        'jumlah_lainnya', 'total', 'id_user', 'keterangan', 'status', 'jenis'
+        'no_bukti',
+        'id_siswa',
+        'tahun_ajaran',
+        'nis',
+        'tingkat',
+        'tgl_transaksi',
+        'jumlah_bulan',
+        'bulan',
+        'jumlah_up',
+        'jumlah_us',
+        'jumlah_upp',
+        'jumlah_upk',
+        'jumlah_potongan',
+        'jumlah_lainnya',
+        'total',
+        'id_user',
+        'keterangan',
+        'status',
+        'jenis'
     ];
 
     protected $hidden = [];
@@ -55,6 +71,16 @@ class Transaction extends Model
     public function schoolDevFee(): HasMany
     {
         return $this->hasMany(SchoolDevFeeTransaction::class, 'id_transaksi', 'id');
+    }
+
+    public function schoolMaintenanceFee(): HasMany
+    {
+        return $this->hasMany(SchoolMaintenanceFeeTransaction::class, 'id_transaksi', 'id');
+    }
+
+    public function schoolEquipmentFee(): HasMany
+    {
+        return $this->hasMany(SchoolEquipmentFeeTransaction::class, 'id_transaksi', 'id');
     }
 
     public function discounts(): HasMany

@@ -6,6 +6,7 @@
     </x-slot>
     @php
         $tunggakan = [];
+        $IsSplitUangPembangunan = $data->tahun_angkatan >= 2026 ? true : false;
     @endphp
 
     <div class="content">
@@ -99,7 +100,8 @@
                                     @if ($item->discount->status == 1 && $item->status == 'Active')
                                         <option value="{{ $item->discount->nama }}" selected>
                                             {{ $item->jenis == 'Uang Sekolah' ? 'US' : 'UP' }}-{{ $item->discount->nama }}
-                                            ({{ $item->discount->besaran }}%)</option>
+                                            ({{ $item->discount->besaran }}%)
+                                        </option>
                                     @endif
                                 @endforeach
                             </select>
@@ -159,8 +161,13 @@
                                     <th>No. Bukti</th>
                                     <th>Tanggal</th>
                                     <th>TA.</th>
-                                    <th>Uang Pembangunan</th>
                                     <th>Uang Sekolah</th>
+                                    @if (!$IsSplitUangPembangunan)
+                                        <th>Uang Pembangunan</th>
+                                    @else
+                                        <th>Uang Pemeliharaan & Pengembangan</th>
+                                        <th>Uang Perlengkapan</th>
+                                    @endif
                                     <th>Jumlah Potongan</th>
                                     <th>Jumlah Lainnya</th>
                                     <th>Total</th>
@@ -177,6 +184,7 @@
                                     @php
                                         $potonganTextUS = false;
                                         $potonganTextUP = false;
+                                        $potonganTextUPP = false;
 
                                         if ($item->discounts->count() > 0) {
                                             foreach ($item->discounts as $disc) {
@@ -184,6 +192,10 @@
                                                     $potonganTextUS = true;
                                                 } elseif ($disc->discount->jenis == 'Uang Pembangunan') {
                                                     $potonganTextUP = true;
+                                                } elseif (
+                                                    $disc->discount->jenis == 'Uang Pemeliharaan dan Pengembangan'
+                                                ) {
+                                                    $potonganTextUPP = true;
                                                 }
                                             }
                                         }
@@ -214,16 +226,6 @@
                                         <td>{{ \Carbon\Carbon::parse($item->tgl_transaksi)->format('d M Y') }}</td>
                                         <td>{{ $item->tahun_ajaran }}</td>
                                         <td>
-                                            @if ($potonganTextUP)
-                                                <span
-                                                    class="text-danger text-decoration-line-through">@currency($item->jumlah_up)</span>
-                                                <br />
-                                                @currency($item->schoolDevFee->sum('total'))
-                                            @else
-                                                @currency($item->jumlah_up)
-                                            @endif
-                                        </td>
-                                        <td>
                                             @if ($potonganTextUS)
                                                 <span
                                                     class="text-danger text-decoration-line-through">@currency($item->jumlah_us)</span>
@@ -238,6 +240,32 @@
                                                 </span>
                                             @endif
                                         </td>
+                                        @if (!$IsSplitUangPembangunan)
+                                            <td>
+                                                @if ($potonganTextUP)
+                                                    <span
+                                                        class="text-danger text-decoration-line-through">@currency($item->jumlah_up)</span>
+                                                    <br />
+                                                    @currency($item->schoolDevFee->sum('total'))
+                                                @else
+                                                    @currency($item->jumlah_up)
+                                                @endif
+                                            </td>
+                                        @else
+                                            <td>
+                                                @if ($potonganTextUPP)
+                                                    <span
+                                                        class="text-danger text-decoration-line-through">@currency($item->jumlah_upp)</span>
+                                                    <br />
+                                                    @currency($item->schoolMaintenanceFee->sum('total'))
+                                                @else
+                                                    @currency($item->jumlah_upp)
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @currency($item->jumlah_upk)
+                                            </td>
+                                        @endif
                                         <td>@currency($item->jumlah_potongan)</td>
                                         <td>@currency($item->jumlah_lainnya)</td>
                                         <td>@currency($item->total)</td>
@@ -277,8 +305,13 @@
                                     <th>No. Bukti</th>
                                     <th>Tanggal</th>
                                     <th>TA.</th>
-                                    <th>Uang Pembangunan</th>
                                     <th>Uang Sekolah</th>
+                                    @if (!$IsSplitUangPembangunan)
+                                        <th>Uang Pembangunan</th>
+                                    @else
+                                        <th>Uang Pemeliharaan & Pengembangan</th>
+                                        <th>Uang Perlengkapan</th>
+                                    @endif
                                     <th>Jumlah Potongan</th>
                                     <th>Jumlah Lainnya</th>
                                     <th>Total</th>
@@ -291,7 +324,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-6">
+            <div @if (!$IsSplitUangPembangunan) class="col-12 col-md-6" @else class="col-12 col-md-12" @endif>
                 <div class="statistics-card card">
                     <h5 class="content-desc">
                         Rincian Transaksi Uang Sekolah
@@ -361,73 +394,219 @@
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-6">
-                <div class="statistics-card card">
-                    <h5 class="content-desc">
-                        Rincian Transaksi Uang Pembangunan Sekolah <br> (@currency($schoolFeeAmount['pembangunan_' . strtolower($tingkat)]))
-                        <br>
-                        <span class="badge bg-info">
-                            Total Transaksi
-                            @if (count($schoolDevFee) > 0)
-                                @currency($schoolDevFee->sum('total'))
-                            @endif
-                        </span>
-                    </h5>
-                    <div class="table-responsive">
-                        <table id="schoolDevFeeTable" class="table table-striped" style="width:100%">
-                            <thead>
-                                <tr>
-                                    <th>No.</th>
-                                    <th>No. Bukti</th>
-                                    <th>Total</th>
-                                    <th>Keterangan</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @php
-                                    $no = 1;
-                                @endphp
-                                @foreach ($schoolDevFee as $item)
+            @if (!$IsSplitUangPembangunan)
+                <div class="col-12 col-md-6">
+                    <div class="statistics-card card">
+                        <h5 class="content-desc">
+                            Rincian Transaksi Uang Pembangunan Sekolah <br> (@currency($schoolFeeAmount['pembangunan_' . strtolower($tingkat)]))
+                            <br>
+                            <span class="badge bg-info">
+                                Total Transaksi
+                                @if (count($schoolDevFee) > 0)
+                                    @currency($schoolDevFee->sum('total'))
+                                @endif
+                            </span>
+                        </h5>
+                        <div class="table-responsive">
+                            <table id="schoolDevFeeTable" class="table table-striped" style="width:100%">
+                                <thead>
                                     <tr>
-                                        <td>{{ $no++ }}</td>
-                                        <td>
-                                            <a href="{{ route('transactions.details', $item->id_transaksi) }}"
-                                                class="btn btn-success btn-sm d-flex w-100" data-bs-toggle="tooltip"
-                                                data-bs-placement="top" title="Detail">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2"
-                                                    width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                                    stroke="#fff" stroke-width="2" stroke-linecap="round"
-                                                    stroke-linejoin="round" class="feather feather-file-text">
-                                                    <path
-                                                        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
-                                                    </path>
-                                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                                    <line x1="16" y1="13" x2="8"
-                                                        y2="13"></line>
-                                                    <line x1="16" y1="17" x2="8"
-                                                        y2="17"></line>
-                                                    <polyline points="10 9 9 9 8 9"></polyline>
-                                                </svg>
-                                                {{ $item->transaction->no_bukti }}
-                                            </a>
-                                        </td>
-                                        <td>@currency($item->total)</td>
-                                        <td>{{ $item->keterangan }}</td>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
                                     </tr>
-                                @endforeach
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <th>No.</th>
-                                    <th>No. Bukti</th>
-                                    <th>Total</th>
-                                    <th>Keterangan</th>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @php
+                                        $no = 1;
+                                    @endphp
+                                    @foreach ($schoolDevFee as $item)
+                                        <tr>
+                                            <td>{{ $no++ }}</td>
+                                            <td>
+                                                <a href="{{ route('transactions.details', $item->id_transaksi) }}"
+                                                    class="btn btn-success btn-sm d-flex w-100"
+                                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Detail">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2"
+                                                        width="20" height="20" viewBox="0 0 24 24"
+                                                        fill="none" stroke="#fff" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        class="feather feather-file-text">
+                                                        <path
+                                                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                        </path>
+                                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                                        <line x1="16" y1="13" x2="8"
+                                                            y2="13"></line>
+                                                        <line x1="16" y1="17" x2="8"
+                                                            y2="17"></line>
+                                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                                    </svg>
+                                                    {{ $item->transaction->no_bukti }}
+                                                </a>
+                                            </td>
+                                            <td>@currency($item->total)</td>
+                                            <td>{{ $item->keterangan }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
+            @else
+                <div class="col-12 col-md-6">
+                    <div class="statistics-card card">
+                        <h5 class="content-desc">
+                            Rincian Transaksi Uang Pemeliharaan & Pengembangan Sekolah <br> (@currency($schoolFeeAmount['pemeliharaan_' . strtolower($tingkat)]))
+                            <br>
+                            <span class="badge bg-info">
+                                Total Transaksi
+                                @if (count($schoolMaintenanceFee) > 0)
+                                    @currency($schoolMaintenanceFee->sum('total'))
+                                @else
+                                    @currency(0)
+                                @endif
+                            </span>
+                        </h5>
+                        <div class="table-responsive">
+                            <table id="schoolDevFeeTable" class="table table-striped" style="width:100%">
+                                <thead>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @php
+                                        $no = 1;
+                                    @endphp
+                                    @foreach ($schoolMaintenanceFee as $item)
+                                        <tr>
+                                            <td>{{ $no++ }}</td>
+                                            <td>
+                                                <a href="{{ route('transactions.details', $item->id_transaksi) }}"
+                                                    class="btn btn-success btn-sm d-flex w-100"
+                                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Detail">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2"
+                                                        width="20" height="20" viewBox="0 0 24 24"
+                                                        fill="none" stroke="#fff" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        class="feather feather-file-text">
+                                                        <path
+                                                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                        </path>
+                                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                                        <line x1="16" y1="13" x2="8"
+                                                            y2="13"></line>
+                                                        <line x1="16" y1="17" x2="8"
+                                                            y2="17"></line>
+                                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                                    </svg>
+                                                    {{ $item->transaction->no_bukti }}
+                                                </a>
+                                            </td>
+                                            <td>@currency($item->total)</td>
+                                            <td>{{ $item->keterangan }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="statistics-card card">
+                        <h5 class="content-desc">
+                            Rincian Transaksi Uang Perlengkapan Sekolah <br> (@currency($schoolFeeAmount['perlengkapan_' . strtolower($tingkat)]))
+                            <br>
+                            <span class="badge bg-info">
+                                Total Transaksi
+                                @if (count($schoolEquipmentFee) > 0)
+                                    @currency($schoolEquipmentFee->sum('total'))
+                                @else
+                                    @currency(0)
+                                @endif
+                            </span>
+                        </h5>
+                        <div class="table-responsive">
+                            <table id="schoolDevFeeTable" class="table table-striped" style="width:100%">
+                                <thead>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @php
+                                        $no = 1;
+                                    @endphp
+                                    @foreach ($schoolEquipmentFee as $item)
+                                        <tr>
+                                            <td>{{ $no++ }}</td>
+                                            <td>
+                                                <a href="{{ route('transactions.details', $item->id_transaksi) }}"
+                                                    class="btn btn-success btn-sm d-flex w-100"
+                                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Detail">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="d-inline me-2"
+                                                        width="20" height="20" viewBox="0 0 24 24"
+                                                        fill="none" stroke="#fff" stroke-width="2"
+                                                        stroke-linecap="round" stroke-linejoin="round"
+                                                        class="feather feather-file-text">
+                                                        <path
+                                                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                        </path>
+                                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                                        <line x1="16" y1="13" x2="8"
+                                                            y2="13"></line>
+                                                        <line x1="16" y1="17" x2="8"
+                                                            y2="17"></line>
+                                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                                    </svg>
+                                                    {{ $item->transaction->no_bukti }}
+                                                </a>
+                                            </td>
+                                            <td>@currency($item->total)</td>
+                                            <td>{{ $item->keterangan }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>No.</th>
+                                        <th>No. Bukti</th>
+                                        <th>Total</th>
+                                        <th>Keterangan</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+
             <div class="col-12 col-md-6">
                 <div class="statistics-card card">
                     <h5 class="content-desc">
@@ -456,6 +635,13 @@
                                     $no = 1;
                                 @endphp
                                 @foreach ($discounts as $item)
+                                    @php
+                                        $kode = match ($item->discount->jenis) {
+                                            'Uang Sekolah' => 'US',
+                                            'Uang Pembangunan' => 'UP',
+                                            'Uang Pemeliharaan dan Pengembangan' => 'UPP',
+                                        };
+                                    @endphp
                                     <tr>
                                         <td>{{ $no++ }}</td>
                                         <td>
@@ -479,7 +665,7 @@
                                                 {{ $item->transaction->no_bukti }}
                                             </a>
                                         </td>
-                                        <td>{{ $item->discount->jenis == 'Uang Sekolah' ? 'US' : 'UP' }}-{{ $item->discount->nama }}
+                                        <td>{{ $kode }}-{{ $item->discount->nama }}
                                         </td>
                                         <td>{{ $item->discount->besaran }}%</td>
                                         <td>@currency($item->total)</td>
@@ -665,10 +851,17 @@
                                     <select name="potongan[]" id="potongan" class="form-select"
                                         multiple="multiple">
                                         @foreach ($discountList as $item)
+                                            @php
+                                                $kode = match ($item->jenis) {
+                                                    'Uang Sekolah' => 'US',
+                                                    'Uang Pembangunan' => 'UP',
+                                                    default => 'UPP',
+                                                };
+                                            @endphp
                                             <option value="{{ $item->id }}" data-potongan="{{ $item->besaran }}"
                                                 data-jenis="{{ $item->jenis }}"
                                                 @if ($discountStudent->contains('id_potongan', $item->id)) {{ 'selected' }} @endif>
-                                                {{ $item->jenis == 'Uang Sekolah' ? 'US' : 'UP' }}-{{ $item->nama }}
+                                                {{ $kode }}-{{ $item->nama }}
                                                 ({{ $item->besaran }}%)
                                             </option>
                                         @endforeach
@@ -684,32 +877,93 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-12 col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch"
-                                            name="pembangunan" id="pembangunanSwitch">
-                                        <label for="uang_pembangunan" class="form-check-label">Uang Pembangunan
-                                            (@currency($schoolFeeAmount['pembangunan_' . strtolower($tingkat)])):</label>
+                        @if ($IsSplitUangPembangunan)
+                            {{-- UPP - Support Discount --}}
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                name="pemeliharaan" id="pemeliharaanSwitch">
+                                            <label for="uang_pemeliharaan" class="form-check-label">Uang Pemeliharaan
+                                                dan Pengembangan
+                                                (@currency($schoolFeeAmount['pemeliharaan_' . strtolower($tingkat)])):</label>
+                                        </div>
+                                        <div class="input-group mb-3">
+                                            <span class="input-group-text">Rp.</span>
+                                            <input type="text" class="form-control money" inputmode="numeric"
+                                                class="form-control money" name="uang_pemeliharaan"
+                                                id="uang_pemeliharaan" value="{{ old('uang_pemeliharaan') }}"
+                                                disabled placeholder="0">
+                                        </div>
+                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('uang_pemeliharaan')" />
                                     </div>
-                                    <div class="input-group mb-3">
-                                        <span class="input-group-text">Rp.</span>
-                                        <input type="number" class="form-control" min="0"
-                                            name="uang_pembangunan" id="uang_pembangunan"
-                                            value="{{ old('uang_pembangunan') }}" disabled placeholder="0">
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <label for="pemeliharaan_ket" class="form-check-label">Keterangan :</label>
+                                        <input type="text" class="form-control" name='pemeliharaan_ket'
+                                            id="pemeliharaan_ket" disabled placeholder="-">
                                     </div>
-                                    <x-input-error class="mt-2 text-danger" :messages="$errors->get('uang_pembangunan')" />
                                 </div>
                             </div>
-                            <div class="col-12 col-md-6">
-                                <div class="mb-3">
-                                    <label for="pembangunan_ket" class="form-check-label">Keterangan :</label>
-                                    <input type="text" class="form-control" name='pembangunan_ket'
-                                        id="pembangunan_ket" disabled placeholder="-">
+                            {{-- UPK - NOT Support Discount --}}
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                name="perlengkapan" id="perlengkapanSwitch">
+                                            <label for="uang_perlengkapan" class="form-check-label">Uang Perlengakapan
+                                                (@currency($schoolFeeAmount['perlengkapan_' . strtolower($tingkat)])):</label>
+                                        </div>
+                                        <div class="input-group mb-3">
+                                            <span class="input-group-text">Rp.</span>
+                                            <input type="text" class="form-control money" inputmode="numeric"
+                                                class="form-control money" name="uang_perlengkapan"
+                                                id="uang_perlengkapan" value="{{ old('uang_perlengkapan') }}"
+                                                disabled placeholder="0">
+                                        </div>
+                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('uang_perlengkapan')" />
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <label for="perlengkapan_ket" class="form-check-label">Keterangan :</label>
+                                        <input type="text" class="form-control" name='perlengkapan_ket'
+                                            id="perlengkapan_ket" disabled placeholder="-">
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        @else
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                name="pembangunan" id="pembangunanSwitch">
+                                            <label for="uang_pembangunan" class="form-check-label">Uang Pembangunan
+                                                (@currency($schoolFeeAmount['pembangunan_' . strtolower($tingkat)])):</label>
+                                        </div>
+                                        <div class="input-group mb-3">
+                                            <span class="input-group-text">Rp.</span>
+                                            <input type="text" class="form-control money" inputmode="numeric"
+                                                name="uang_pembangunan" id="uang_pembangunan"
+                                                value="{{ old('uang_pembangunan') }}" disabled placeholder="0">
+                                        </div>
+                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('uang_pembangunan')" />
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="mb-3">
+                                        <label for="pembangunan_ket" class="form-check-label">Keterangan :</label>
+                                        <input type="text" class="form-control" name='pembangunan_ket'
+                                            id="pembangunan_ket" disabled placeholder="-">
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+
                         <div class="row" id="containerLainnya">
                             <div class="col-12">
                                 <div class="form-check form-switch form-check-inline">
@@ -834,6 +1088,26 @@
                     }
                 });
 
+                $('#pemeliharaanSwitch').change(function() {
+                    if (this.checked) {
+                        $('#uang_pemeliharaan').prop('disabled', false);
+                        $('#pemeliharaan_ket').prop('disabled', false);
+                    } else {
+                        $('#uang_pemeliharaan').prop('disabled', true);
+                        $('#pemeliharaan_ket').prop('disabled', true);
+                    }
+                });
+
+                $('#perlengkapanSwitch').change(function() {
+                    if (this.checked) {
+                        $('#uang_perlengkapan').prop('disabled', false);
+                        $('#perlengkapan_ket').prop('disabled', false);
+                    } else {
+                        $('#uang_perlengkapan').prop('disabled', true);
+                        $('#perlengkapan_ket').prop('disabled', true);
+                    }
+                });
+
                 $('#lainnyaSwitch').change(function() {
                     if (this.checked) {
                         $('#btnLainnya').prop('disabled', false);
@@ -874,10 +1148,23 @@
                     }
                 });
 
+                function parseMoney(selector) {
+                    const v = $(selector).val();
+                    if (!v) return 0;
+
+                    // format kamu: ribuan "." dan desimal "," (walau decimalPlaces: 0)
+                    const cleaned = String(v)
+                        .replace(/\./g, '') // hapus thousand separator
+                        .replace(/,/g, '.'); // kalau suatu saat ada desimal
+
+                    const n = parseFloat(cleaned);
+                    return Number.isFinite(n) ? n : 0;
+                }
 
                 let bulan = 0;
                 let potonganUs = 0;
                 let potonganUp = 0;
+                let potonganUpp = 0;
                 let lainnya = 0;
 
                 function updateTotal() {
@@ -899,8 +1186,10 @@
                     // console.log(bulan + potongan);
                     let us = parseInt($('#uang_sekolah').data('us'));
                     let up = 0;
+                    let upp = 0;
+                    let upk = 0;
                     if ($('#pembangunanSwitch').is(':checked')) {
-                        up = parseInt($('#uang_pembangunan').val());
+                        up = parseMoney('#uang_pembangunan');
 
                         if (potonganUp > 0) {
                             up = up - ((up * potonganUp) / 100);
@@ -911,11 +1200,31 @@
                         }
                     }
 
+                    if ($('#pemeliharaanSwitch').is(':checked')) {
+                        upp = parseMoney('#uang_pemeliharaan');
+
+                        if (potonganUpp > 0) {
+                            upp = upp - ((upp * potonganUpp) / 100);
+                        }
+
+                        if (isNaN(upp)) {
+                            upp = 0;
+                        }
+                    }
+
+                    if ($('#perlengkapanSwitch').is(':checked')) {
+                        upk = parseMoney('#uang_perlengkapan');
+
+                        if (isNaN(upk)) {
+                            upk = 0;
+                        }
+                    }
+
                     var total = 0;
                     if (potonganUs > 0) {
-                        total = ((us * bulan) - (((us * potonganUs) / 100) * bulan)) + up + lainnya;
+                        total = ((us * bulan) - (((us * potonganUs) / 100) * bulan)) + up + upp + upk + lainnya;
                     } else {
-                        total = (us * bulan) + up + lainnya;
+                        total = (us * bulan) + up + upp + upk + lainnya;
                     }
 
                     total = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -925,18 +1234,23 @@
                 function updatePotongan() {
                     var totalPotonganUS = 0;
                     var totalPotonganUP = 0;
+                    var totalPotonganUPP = 0;
                     $('select#potongan option').each(function() {
                         if ($(this).is(':selected')) {
                             jenis = $(this).data('jenis');
                             if (jenis === 'Uang Sekolah') {
                                 totalPotonganUS += parseInt($(this).data('potongan'));
-                            } else if (jenis === 'Uang Pembangunan') {
+                            } else if (jenis === 'Uang Pembangunan' && $('#pembangunanSwitch').is(':checked')) {
                                 totalPotonganUP += parseInt($(this).data('potongan'));
+                            } else if (jenis === 'Uang Pemeliharaan dan Pengembangan' && $(
+                                    '#pemeliharaanSwitch').is(':checked')) {
+                                totalPotonganUPP += parseInt($(this).data('potongan'));
                             }
                         }
                     });
                     potonganUs = totalPotonganUS;
                     potonganUp = totalPotonganUP;
+                    potonganUpp = totalPotonganUPP;
                 }
 
                 $('#modalForm').change(function(e) {
@@ -969,7 +1283,7 @@
                             '"><div class="col-12 col-md-4"><div class="mb-3"><label for="total_lainnya" class="col-form-label">Nominal :</label><div class="input-group mb-3"><button type="button" class="btn btn-danger btn-sm d-inline delete" data-id="element' +
                             x +
                             '"><img src="{{ url('/assets/img/global/trash.svg') }}" width="20" alt="hapus"></button><span class="input-group-text">Rp.</span><input type="number" class="form-control" min="0" name="total_lainnya[]" id="total_lainnya" placeholder="0"></div></div></div><div class="col-12 col-md-8"><div class="mb-3"><label for="lainnya_ket" class="col-form-label">Keterangan :</label><input type="text" class="form-control" name="lainnya_ket[]" id="lainnya_ket" placeholder="-" ></div></div></div>'
-                            );
+                        );
                         x++;
                     } else {
                         alert('Kamu sudah mencapai batas maksimum')

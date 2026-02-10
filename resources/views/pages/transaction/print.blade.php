@@ -103,6 +103,11 @@
             margin-left: 14.3cm;
         }
 
+        .jumlah-new {
+            margin-left: 1.3cm;
+        }
+
+
         .tanggal-invoice {
             position: absolute;
             margin-top: 8.7cm;
@@ -189,7 +194,20 @@
         function penyebut($nilai)
         {
             $nilai = abs($nilai);
-            $huruf = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+            $huruf = [
+                '',
+                'satu',
+                'dua',
+                'tiga',
+                'empat',
+                'lima',
+                'enam',
+                'tujuh',
+                'delapan',
+                'sembilan',
+                'sepuluh',
+                'sebelas',
+            ];
             $temp = '';
             if ($nilai < 12) {
                 $temp = ' ' . $huruf[$nilai];
@@ -247,6 +265,20 @@
             Pembangunan : @currency($data->jumlah_up)
             <br />
         @endif
+        @if ($data->schoolMaintenanceFee->count() > 0)
+            Pengembangan : @currency($data->jumlah_upp)
+            <br />
+        @elseif ($data->jumlah_upp > 0)
+            Pengembangan : @currency($data->jumlah_upp)
+            <br />
+        @endif
+        @if ($data->schoolEquipmentFee->count() > 0)
+            Perlengkapan : @currency($data->jumlah_upk)
+            <br />
+        @elseif ($data->jumlah_upk > 0)
+            Perlengkapan : @currency($data->jumlah_upk)
+            <br />
+        @endif
         @if ($data->schoolFee->count() > 0)
             Uang Sekolah &nbsp; : @currency($uang_sekolah)
             <br />
@@ -269,8 +301,9 @@
         @elseif ($data->jumlah_lainnya > 0)
             Lain-lain : @currency($data->jumlah_lainnya)
         @endif
+        <span class="jumlah-new">@currency($data->total)</span>
     </p>
-    <p class="jumlah">@currency($data->total)</p>
+    {{-- <p class="jumlah">@currency($data->total)</p> --}}
     <p class="tanggal-invoice">{{ \Carbon\Carbon::now()->format('d F Y') }}</p>
     <p class="admin">{{ $data->user->name }}</p>
 </body>
