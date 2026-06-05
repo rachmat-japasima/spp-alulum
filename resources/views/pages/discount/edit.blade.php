@@ -60,6 +60,16 @@
                         </div>
 
                         <div class="mb-3 row">
+                            <label for="no_surat" class="col-sm-2 col-form-label">{{ __('No. Surat') }}</label>
+                            <div class="col-sm-10">
+                                <input type="text" class="form-control" name="no_surat" id="no_surat"
+                                    value="{{ old('no_surat', $data->no_surat) }}" required
+                                    placeholder="Nomor Surat Sekolah / Yayasan Resmi">
+                                <x-input-error class="mt-2 text-danger" :messages="$errors->get('no_surat')" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3 row">
                             <label for="keterangan" class="col-sm-2 col-form-label">{{ __('Keterangan') }}</label>
                             <div class="col-sm-10">
                                 <textarea name="keterangan" id="keterangan" rows="3" style="height: 70px" class="form-control" required>{{ old('keterangan', $data->keterangan) }}</textarea>

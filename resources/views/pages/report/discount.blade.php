@@ -141,8 +141,9 @@
                                     @foreach ($listDiscount as $item)
                                         <option value="{{ $item->id }}"
                                             {{ old('potongan', $filters->potongan) == $item->id ? 'selected' : '' }}>
-                                            {{ $item->jenis == 'Uang Sekolah' ? '(US)' : '(UP)' }} -
-                                            {{ $item->nama }}</option>
+                                            {{ ($item->jenis == 'Uang Sekolah' ? '(US)' : $item->jenis == 'Uang Pembangunan') ? '(UP)' : '(UPP)' }}
+                                            -
+                                            {{ $item->nama }} ({{ $item->no_surat }})</option>
                                     @endforeach
                                 </select>
                                 <x-input-error class="mt-2 text-danger" :messages="$errors->get('potongan')" />
@@ -375,7 +376,7 @@
                 tooltip: {
                     headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
                     pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
-                        '<td style="padding:0"><b>{point.y:.1f} Transaksi</b></td></tr>',
+                        '<td style="padding:0"><b>{point.y} Transaksi</b></td></tr>',
                     footerFormat: '</table>',
                     shared: true,
                     useHTML: true
@@ -388,19 +389,19 @@
                 },
                 series: [{
                     name: 'RA',
-                    data: [{!! $total->RA !!}]
+                    data: [{!! $jumlah->RA !!}]
 
                 }, {
                     name: 'SD',
-                    data: [{!! $total->SD !!}]
+                    data: [{!! $jumlah->SD !!}]
 
                 }, {
                     name: 'SMP',
-                    data: [{!! $total->SMP !!}]
+                    data: [{!! $jumlah->SMP !!}]
 
                 }, {
                     name: 'SMA',
-                    data: [{!! $total->SMA !!}]
+                    data: [{!! $jumlah->SMA !!}]
 
                 }],
                 colors: [

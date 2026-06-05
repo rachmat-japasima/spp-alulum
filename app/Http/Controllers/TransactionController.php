@@ -69,6 +69,7 @@ class TransactionController extends Controller
         $discountStudent = DiscountStudent::whereBelongsTo($data)->where('status', 'Active')->get();
         $list_siswa = Student::Where('status', 1)->get();
         $schoolFeeAmount = Fee::where('tahun_angkatan', $data->tahun_angkatan)->first();
+        $devFeeStatus = $data->getDevelopmentFeeStatus();
 
         $discountList = Discount::where('status', 1)->get();
         $schoolYear = SchoolYear::where('status', 1)
@@ -140,7 +141,8 @@ class TransactionController extends Controller
             'discountList' => $discountList,
             'totalTransaksi' => $totalTransaksi,
             'months' => $listMonths,
-            'transactionId' => $transactionId
+            'transactionId' => $transactionId,
+            'devFeeStatus' => $devFeeStatus
         ]));
     }
 
@@ -156,6 +158,7 @@ class TransactionController extends Controller
         $discountStudent = DiscountStudent::whereBelongsTo($data)->where('status', 'Active')->get();
         $list_siswa = Student::Where('status', 1)->get();
         $schoolFeeAmount = Fee::where('tahun_angkatan', $data->tahun_angkatan)->first();
+        $devFeeStatus = $data->getDevelopmentFeeStatus();
 
         $discountList = Discount::where('status', 1)->get();
         $schoolYear = SchoolYear::where('status', 1)
@@ -227,7 +230,8 @@ class TransactionController extends Controller
             'discountList' => $discountList,
             'totalTransaksi' => $totalTransaksi,
             'months' => $listMonths,
-            'transactionId' => $transactionId
+            'transactionId' => $transactionId,
+            'devFeeStatus' => $devFeeStatus
         ]));
     }
 

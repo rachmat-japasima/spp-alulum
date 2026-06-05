@@ -17,10 +17,10 @@ class DiscountController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index() : View
+    public function index(): View
     {
-        $data = Discount::orderBy('nama')
-        ->get();
+        $data = Discount::orderBy('updated_at', 'desc')
+            ->get();
 
         return view('pages.discount.table', ([
             'data' => $data
@@ -32,7 +32,7 @@ class DiscountController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function create() : View
+    public function create(): View
     {
         return view('pages.discount.add');
     }
@@ -43,14 +43,15 @@ class DiscountController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request) : RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
         $request->validate([
             'nama' => ['required', 'string', 'max:255'],
             'besaran' => ['required', 'integer'],
             'jenis' => ['required', 'string'],
+            'no_surat' => ['required', 'string'],
             'keterangan' => ['string'],
-            'status' => ['required','integer','in:0,1'],
+            'status' => ['required', 'integer', 'in:0,1'],
         ]);
 
         $data = $request->all();
@@ -66,7 +67,7 @@ class DiscountController extends Controller
      * @param  \App\Models\Discount  $discount
      * @return \Illuminate\Http\Response
      */
-    public function show(Discount $discount) : RedirectResponse
+    public function show(Discount $discount): RedirectResponse
     {
         return back();
     }
@@ -77,7 +78,7 @@ class DiscountController extends Controller
      * @param  \App\Models\Discount  $discount
      * @return \Illuminate\Http\Response
      */
-    public function edit($id) : View
+    public function edit($id): View
     {
         $data = Discount::findorFail($id);
         $students = Student::Where('status', 1)->get();
@@ -97,19 +98,20 @@ class DiscountController extends Controller
      * @param  \App\Models\Discount  $discount
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, string $id) : RedirectResponse
+    public function update(Request $request, string $id): RedirectResponse
     {
         $data = $request->validate([
             'nama' => ['required', 'string', 'max:255'],
             'besaran' => ['required', 'integer'],
             'jenis' => ['required', 'string'],
+            'no_surat' => ['required', 'string'],
             'keterangan' => ['string'],
-            'status' => ['required','integer','in:0,1'],
+            'status' => ['required', 'integer', 'in:0,1'],
         ]);
 
         $data       = $request->all();
         $discount    = Discount::findorFail($id);
-            
+
         $discount->update($data);
         Alert::success('Berhasil', 'Data Potongan Berhasil Diubah!');
 
@@ -133,9 +135,9 @@ class DiscountController extends Controller
     }
 
     /**
-    * Activate Discount by Admin
-    */
-    public function active($id) : RedirectResponse
+     * Activate Discount by Admin
+     */
+    public function active($id): RedirectResponse
     {
         $discount = Discount::find($id);
         $discount->status = 1;
@@ -145,10 +147,10 @@ class DiscountController extends Controller
         return back();
     }
 
-     /**
-    * In-activate Discount by Admin
-    */
-    public function hold($id) : RedirectResponse
+    /**
+     * In-activate Discount by Admin
+     */
+    public function hold($id): RedirectResponse
     {
         $discount = Discount::find($id);
         $discount->status = 0;
@@ -159,26 +161,26 @@ class DiscountController extends Controller
     }
 
     /**
-    * Add student to Discount by Admin
-    */
-    public function addStudent(Request $request) : RedirectResponse
+     * Add student to Discount by Admin
+     */
+    public function addStudent(Request $request): RedirectResponse
     {
         $data = $request->all();
 
-        if(DiscountStudent::where('id_siswa', $request->id_siswa)->where('id_potongan', $request->id_potongan)->exists()){
+        if (DiscountStudent::where('id_siswa', $request->id_siswa)->where('id_potongan', $request->id_potongan)->exists()) {
             Alert::warning('Maaf!', 'Data siswa sudah ada di Potongan ini!');
-        }else{
+        } else {
             DiscountStudent::create($data);
             Alert::success('Berhasil', 'Siswa Berhasil di tambahkan ke Potongan!');
-        }   
-        
+        }
+
         return back();
     }
 
     /**
-    * Add student to Discount by Admin
-    */
-    public function removeStudent(string $id) : RedirectResponse
+     * Add student to Discount by Admin
+     */
+    public function removeStudent(string $id): RedirectResponse
     {
         $discount = DiscountStudent::findOrFail($id);
 

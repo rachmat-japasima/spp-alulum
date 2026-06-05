@@ -5,6 +5,10 @@
         </h2>
     </x-slot>
 
+    @php
+        $IsNewRule = $data->tahun_angkatan >= 2026 ? true : false;
+    @endphp
+
     <div class="content">
         <form method="post" action="{{ route('fees.update', $data->id) }}">
             @csrf
@@ -80,50 +84,55 @@
                                         <h5>Tingkat RA</h5>
                                         <hr />
 
-                                        <div class="mb-3 row">
-                                            <label for="pembangunan_ra"
-                                                class="col-sm-4 col-form-label">{{ __('Pembangunan RA') }}</label>
-                                            <div class="col-sm-8">
-                                                <div class="input-group mb-3">
-                                                    <span class="input-group-text">Rp.</span>
-                                                    <input type="text" class="form-control money" inputmode="numeric"
-                                                        name="pembangunan_ra" id="pembangunan_ra"
-                                                        value="{{ old('pembangunan_ra', $data->pembangunan_ra) }}"
-                                                        required placeholder="0">
+                                        @if (!$IsNewRule)
+                                            <div class="mb-3 row">
+                                                <label for="pembangunan_ra"
+                                                    class="col-sm-4 col-form-label">{{ __('Pembangunan RA') }}</label>
+                                                <div class="col-sm-8">
+                                                    <div class="input-group mb-3">
+                                                        <span class="input-group-text">Rp.</span>
+                                                        <input type="text" class="form-control money"
+                                                            inputmode="numeric" name="pembangunan_ra"
+                                                            id="pembangunan_ra"
+                                                            value="{{ old('pembangunan_ra', $data->pembangunan_ra) }}"
+                                                            required placeholder="0">
+                                                    </div>
+                                                    <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_ra')" />
                                                 </div>
-                                                <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_ra')" />
                                             </div>
-                                        </div>
+                                        @else
+                                            <div class="mb-3 row">
+                                                <label for="pemeliharaan_ra"
+                                                    class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan RA') }}</label>
+                                                <div class="col-sm-8">
+                                                    <div class="input-group mb-3">
+                                                        <span class="input-group-text">Rp.</span>
+                                                        <input type="text" class="form-control money"
+                                                            inputmode="numeric" name="pemeliharaan_ra"
+                                                            id="pemeliharaan_ra"
+                                                            value="{{ old('pemeliharaan_ra', $data->pemeliharaan_ra) }}"
+                                                            required placeholder="0">
+                                                    </div>
+                                                    <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_ra')" />
+                                                </div>
+                                            </div>
 
-                                        <div class="mb-3 row">
-                                            <label for="pemeliharaan_ra"
-                                                class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan RA') }}</label>
-                                            <div class="col-sm-8">
-                                                <div class="input-group mb-3">
-                                                    <span class="input-group-text">Rp.</span>
-                                                    <input type="text" class="form-control money" inputmode="numeric"
-                                                        name="pemeliharaan_ra" id="pemeliharaan_ra"
-                                                        value="{{ old('pemeliharaan_ra', $data->pemeliharaan_ra) }}"
-                                                        required placeholder="0">
+                                            <div class="mb-3 row">
+                                                <label for="perlengkapan_ra"
+                                                    class="col-sm-4 col-form-label">{{ __('Perlengkapan RA') }}</label>
+                                                <div class="col-sm-8">
+                                                    <div class="input-group mb-3">
+                                                        <span class="input-group-text">Rp.</span>
+                                                        <input type="text" class="form-control money"
+                                                            inputmode="numeric" name="perlengkapan_ra"
+                                                            id="perlengkapan_ra"
+                                                            value="{{ old('perlengkapan_ra', $data->perlengkapan_ra) }}"
+                                                            required placeholder="0">
+                                                    </div>
+                                                    <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_ra')" />
                                                 </div>
-                                                <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_ra')" />
                                             </div>
-                                        </div>
-
-                                        <div class="mb-3 row">
-                                            <label for="perlengkapan_ra"
-                                                class="col-sm-4 col-form-label">{{ __('Perlengkapan RA') }}</label>
-                                            <div class="col-sm-8">
-                                                <div class="input-group mb-3">
-                                                    <span class="input-group-text">Rp.</span>
-                                                    <input type="text" class="form-control money" inputmode="numeric"
-                                                        name="perlengkapan_ra" id="perlengkapan_ra"
-                                                        value="{{ old('perlengkapan_ra', $data->perlengkapan_ra) }}"
-                                                        required placeholder="0">
-                                                </div>
-                                                <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_ra')" />
-                                            </div>
-                                        </div>
+                                        @endif
 
                                         <div class="mb-3 row">
                                             <label for="ra"
@@ -148,50 +157,52 @@
                                 <h5>Tingkat SD</h5>
                                 <hr />
 
-                                <div class="mb-3 row">
-                                    <label for="pembangunan_sd"
-                                        class="col-sm-4 col-form-label">{{ __('Pembangunan SD') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pembangunan_sd" id="pembangunan_sd"
-                                                value="{{ old('pembangunan_sd', $data->pembangunan_sd) }}" required
-                                                placeholder="0">
+                                @if (!$IsNewRule)
+                                    <div class="mb-3 row">
+                                        <label for="pembangunan_sd"
+                                            class="col-sm-4 col-form-label">{{ __('Pembangunan SD') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pembangunan_sd" id="pembangunan_sd"
+                                                    value="{{ old('pembangunan_sd', $data->pembangunan_sd) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_sd')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_sd')" />
                                     </div>
-                                </div>
+                                @else
+                                    <div class="mb-3 row">
+                                        <label for="pemeliharaan_sd"
+                                            class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SD') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pemeliharaan_sd" id="pemeliharaan_sd"
+                                                    value="{{ old('pemeliharaan_sd', $data->pemeliharaan_sd) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_sd')" />
+                                        </div>
+                                    </div>
 
-                                <div class="mb-3 row">
-                                    <label for="pemeliharaan_sd"
-                                        class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SD') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pemeliharaan_sd" id="pemeliharaan_sd"
-                                                value="{{ old('pemeliharaan_sd', $data->pemeliharaan_sd) }}" required
-                                                placeholder="0">
+                                    <div class="mb-3 row">
+                                        <label for="perlengkapan_sd"
+                                            class="col-sm-4 col-form-label">{{ __('Perlengkapan SD') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="perlengkapan_sd" id="perlengkapan_sd"
+                                                    value="{{ old('perlengkapan_sd', $data->perlengkapan_sd) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_sd')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_sd')" />
                                     </div>
-                                </div>
-
-                                <div class="mb-3 row">
-                                    <label for="perlengkapan_sd"
-                                        class="col-sm-4 col-form-label">{{ __('Perlengkapan SD') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="perlengkapan_sd" id="perlengkapan_sd"
-                                                value="{{ old('perlengkapan_sd', $data->perlengkapan_sd) }}" required
-                                                placeholder="0">
-                                        </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_sd')" />
-                                    </div>
-                                </div>
+                                @endif
 
                                 <div class="mb-3 row">
                                     <label for="kelas_1" class="col-sm-4 col-form-label">{{ __('Kelas 1') }}</label>
@@ -284,50 +295,52 @@
                                 <h5>Tingkat SMP</h5>
                                 <hr />
 
-                                <div class="mb-3 row">
-                                    <label for="pembangunan_smp"
-                                        class="col-sm-4 col-form-label">{{ __('Pembangunan SMP') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pembangunan_smp" id="pembangunan_smp"
-                                                value="{{ old('pembangunan_smp', $data->pembangunan_smp) }}" required
-                                                placeholder="0">
+                                @if (!$IsNewRule)
+                                    <div class="mb-3 row">
+                                        <label for="pembangunan_smp"
+                                            class="col-sm-4 col-form-label">{{ __('Pembangunan SMP') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pembangunan_smp" id="pembangunan_smp"
+                                                    value="{{ old('pembangunan_smp', $data->pembangunan_smp) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_smp')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_smp')" />
                                     </div>
-                                </div>
+                                @else
+                                    <div class="mb-3 row">
+                                        <label for="pemeliharaan_smp"
+                                            class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SMP') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pemeliharaan_smp" id="pemeliharaan_smp"
+                                                    value="{{ old('pemeliharaan_smp', $data->pemeliharaan_smp) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_smp')" />
+                                        </div>
+                                    </div>
 
-                                <div class="mb-3 row">
-                                    <label for="pemeliharaan_smp"
-                                        class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SMP') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pemeliharaan_smp" id="pemeliharaan_smp"
-                                                value="{{ old('pemeliharaan_smp', $data->pemeliharaan_smp) }}"
-                                                required placeholder="0">
+                                    <div class="mb-3 row">
+                                        <label for="perlengkapan_smp"
+                                            class="col-sm-4 col-form-label">{{ __('Perlengkapan SMP') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="perlengkapan_smp" id="perlengkapan_smp"
+                                                    value="{{ old('perlengkapan_smp', $data->perlengkapan_smp) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_smp')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_smp')" />
                                     </div>
-                                </div>
-
-                                <div class="mb-3 row">
-                                    <label for="perlengkapan_smp"
-                                        class="col-sm-4 col-form-label">{{ __('Perlengkapan SMP') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="perlengkapan_smp" id="perlengkapan_smp"
-                                                value="{{ old('perlengkapan_smp', $data->perlengkapan_smp) }}"
-                                                required placeholder="0">
-                                        </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_smp')" />
-                                    </div>
-                                </div>
+                                @endif
 
                                 <div class="mb-3 row">
                                     <label for="kelas_7" class="col-sm-4 col-form-label">{{ __('Kelas 7') }}</label>
@@ -377,51 +390,52 @@
                                 <h5>Tingkat SMA</h5>
                                 <hr />
 
-                                <div class="mb-3 row">
-                                    <label for="pembangunan_sma"
-                                        class="col-sm-4 col-form-label">{{ __('Pembangunan SMA') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pembangunan_sma" id="pembangunan_sma"
-                                                value="{{ old('pembangunan_sma', $data->pembangunan_sma) }}" required
-                                                placeholder="0">
+                                @if (!$IsNewRule)
+                                    <div class="mb-3 row">
+                                        <label for="pembangunan_sma"
+                                            class="col-sm-4 col-form-label">{{ __('Pembangunan SMA') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pembangunan_sma" id="pembangunan_sma"
+                                                    value="{{ old('pembangunan_sma', $data->pembangunan_sma) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_sma')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pembangunan_sma')" />
                                     </div>
-                                </div>
-
-                                <div class="mb-3 row">
-                                    <label for="pemeliharaan_sma"
-                                        class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SMA') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="pemeliharaan_sma" id="pemeliharaan_sma"
-                                                value="{{ old('pemeliharaan_sma', $data->pemeliharaan_sma) }}"
-                                                required placeholder="0">
+                                @else
+                                    <div class="mb-3 row">
+                                        <label for="pemeliharaan_sma"
+                                            class="col-sm-4 col-form-label">{{ __('Pemeliharaan & Pengembangan SMA') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="pemeliharaan_sma" id="pemeliharaan_sma"
+                                                    value="{{ old('pemeliharaan_sma', $data->pemeliharaan_sma) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_sma')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('pemeliharaan_sma')" />
                                     </div>
-                                </div>
 
-                                <div class="mb-3 row">
-                                    <label for="perlengkapan_sma"
-                                        class="col-sm-4 col-form-label">{{ __('Perlengkapan SMA') }}</label>
-                                    <div class="col-sm-8">
-                                        <div class="input-group mb-3">
-                                            <span class="input-group-text">Rp.</span>
-                                            <input type="text" class="form-control money" inputmode="numeric"
-                                                name="perlengkapan_sma" id="perlengkapan_sma"
-                                                value="{{ old('perlengkapan_sma', $data->perlengkapan_sma) }}"
-                                                required placeholder="0">
+                                    <div class="mb-3 row">
+                                        <label for="perlengkapan_sma"
+                                            class="col-sm-4 col-form-label">{{ __('Perlengkapan SMA') }}</label>
+                                        <div class="col-sm-8">
+                                            <div class="input-group mb-3">
+                                                <span class="input-group-text">Rp.</span>
+                                                <input type="text" class="form-control money" inputmode="numeric"
+                                                    name="perlengkapan_sma" id="perlengkapan_sma"
+                                                    value="{{ old('perlengkapan_sma', $data->perlengkapan_sma) }}"
+                                                    required placeholder="0">
+                                            </div>
+                                            <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_sma')" />
                                         </div>
-                                        <x-input-error class="mt-2 text-danger" :messages="$errors->get('perlengkapan_sma')" />
                                     </div>
-                                </div>
-
+                                @endif
 
                                 <div class="mb-3 row">
                                     <label for="kelas_10"

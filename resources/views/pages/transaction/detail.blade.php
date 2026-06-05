@@ -887,7 +887,14 @@
                                                 name="pemeliharaan" id="pemeliharaanSwitch">
                                             <label for="uang_pemeliharaan" class="form-check-label">Uang Pemeliharaan
                                                 dan Pengembangan
-                                                (@currency($schoolFeeAmount['pemeliharaan_' . strtolower($tingkat)])):</label>
+                                                (
+                                                @if ($devFeeStatus['is_paid'])
+                                                    <span class="text-success">LUNAS</span>
+                                                @else
+                                                    @currency($devFeeStatus['upp_paid']) dari @currency($devFeeStatus['upp_bill'])
+                                                @endif
+                                                ):
+                                            </label>
                                         </div>
                                         <div class="input-group mb-3">
                                             <span class="input-group-text">Rp.</span>
@@ -908,14 +915,22 @@
                                 </div>
                             </div>
                             {{-- UPK - NOT Support Discount --}}
+                            {{-- @dd($devFeeStatus) --}}
                             <div class="row">
                                 <div class="col-12 col-md-6">
                                     <div class="mb-3">
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" role="switch"
                                                 name="perlengkapan" id="perlengkapanSwitch">
-                                            <label for="uang_perlengkapan" class="form-check-label">Uang Perlengakapan
-                                                (@currency($schoolFeeAmount['perlengkapan_' . strtolower($tingkat)])):</label>
+                                            <label for="uang_perlengkapan" class="form-check-label">Uang Perlengkapan
+                                                (
+                                                @if ($devFeeStatus['is_paid'])
+                                                    <span class="text-success">LUNAS</span>
+                                                @else
+                                                    @currency($devFeeStatus['upk_paid']) dari @currency($devFeeStatus['upk_bill'])
+                                                @endif
+                                                ):
+                                            </label>
                                         </div>
                                         <div class="input-group mb-3">
                                             <span class="input-group-text">Rp.</span>
@@ -941,9 +956,17 @@
                                     <div class="mb-3">
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" role="switch"
-                                                name="pembangunan" id="pembangunanSwitch">
+                                                {{ $devFeeStatus['is_paid'] ? 'disabled' : '' }} name="pembangunan"
+                                                id="pembangunanSwitch">
                                             <label for="uang_pembangunan" class="form-check-label">Uang Pembangunan
-                                                (@currency($schoolFeeAmount['pembangunan_' . strtolower($tingkat)])):</label>
+                                                (
+                                                @if ($devFeeStatus['is_paid'])
+                                                    <span class="text-success">LUNAS</span>
+                                                @else
+                                                    @currency($devFeeStatus['paid']) dari @currency($devFeeStatus['bill'])
+                                                @endif
+                                                ):
+                                            </label>
                                         </div>
                                         <div class="input-group mb-3">
                                             <span class="input-group-text">Rp.</span>

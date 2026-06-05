@@ -1061,6 +1061,7 @@ class ReportController extends Controller
         $txQuery = Transaction::query()
             ->whereBetween('tgl_transaksi', [$startDate, $endDate])
             ->where('status', 'Success')
+            ->whereHas('discounts')
             ->with('student'); // biar bisa grouping di memory
 
         if ($tingkat !== 'full') {
@@ -1212,6 +1213,7 @@ class ReportController extends Controller
         // (opsional) transaksi base, kalau view masih butuh $data
         $txQuery = Transaction::query()
             ->whereBetween('tgl_transaksi', [$startDate, $endDate])
+            ->whereHas('discounts')
             ->where('status', 'Success');
 
         if ($tingkatFilter !== 'full') {

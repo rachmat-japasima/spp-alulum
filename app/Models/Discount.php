@@ -16,7 +16,7 @@ class Discount extends Model
 
     protected $table = 'potongan';
 
-    protected $fillable = ['nama', 'besaran', 'jenis', 'keterangan', 'status'];
+    protected $fillable = ['nama', 'besaran', 'jenis', 'no_surat', 'keterangan', 'status'];
 
     protected $hidden = [];
 

@@ -117,10 +117,10 @@ class FeeController extends Controller
     public function update(Request $request, string $id): RedirectResponse
     {
         $request->validate([
-            'pembangunan_ra' => ['required', 'numeric', 'min:0'],
-            'pembangunan_sd' => ['required', 'numeric', 'min:0'],
-            'pembangunan_smp' => ['required', 'numeric', 'min:0'],
-            'pembangunan_sma' => ['required', 'numeric', 'min:0'],
+            'pembangunan_ra' => ['numeric', 'min:0'],
+            'pembangunan_sd' => ['numeric', 'min:0'],
+            'pembangunan_smp' => ['numeric', 'min:0'],
+            'pembangunan_sma' => ['numeric', 'min:0'],
             'seleksi_masuk' => ['required', 'numeric', 'min:0'],
             'kelas_1' => ['required', 'numeric', 'min:0'],
             'kelas_2' => ['required', 'numeric', 'min:0'],
@@ -135,14 +135,14 @@ class FeeController extends Controller
             'kelas_11' => ['required', 'numeric', 'min:0'],
             'kelas_12' => ['required', 'numeric', 'min:0'],
             'ra' => ['required', 'numeric', 'min:0'],
-            'pemeliharaan_ra' => ['required', 'numeric', 'min:0'],
-            'perlengkapan_ra' => ['required', 'numeric', 'min:0'],
-            'pemeliharaan_sd' => ['required', 'numeric', 'min:0'],
-            'perlengkapan_sd' => ['required', 'numeric', 'min:0'],
-            'pemeliharaan_smp' => ['required', 'numeric', 'min:0'],
-            'perlengkapan_smp' => ['required', 'numeric', 'min:0'],
-            'pemeliharaan_sma' => ['required', 'numeric', 'min:0'],
-            'perlengkapan_sma' => ['required', 'numeric', 'min:0'],
+            'pemeliharaan_ra' => ['numeric', 'min:0'],
+            'perlengkapan_ra' => ['numeric', 'min:0'],
+            'pemeliharaan_sd' => ['numeric', 'min:0'],
+            'perlengkapan_sd' => ['numeric', 'min:0'],
+            'pemeliharaan_smp' => ['numeric', 'min:0'],
+            'perlengkapan_smp' => ['numeric', 'min:0'],
+            'pemeliharaan_sma' => ['numeric', 'min:0'],
+            'perlengkapan_sma' => ['numeric', 'min:0'],
         ]);
         $data       = $request->all();
         $fee        = fee::findorFail($id);

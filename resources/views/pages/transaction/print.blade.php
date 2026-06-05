@@ -59,9 +59,17 @@
             width: 8cm;
         }
 
+        .sisa-up {
+            position: absolute;
+            margin-top: 8.7cm;
+            margin-left: 0.7cm;
+            text-transform: capitalize;
+            width: 8cm;
+        }
+
         .jenis {
             position: absolute;
-            margin-top: 11cm;
+            margin-top: 11.3cm;
             margin-left: 3cm;
             text-transform: capitalize;
             width: 8cm;
@@ -243,6 +251,7 @@
             return $hasil;
         }
     @endphp
+    {{-- @dd($student->getDevelopmentFeeStatus()) --}}
     <img src="{{ url('/assets/img/template-invoice-alulum.png') }}" style="width: 21cm; height: 14cm;display:none;"
         alt="">
     <p class="noBukti">{{ $data->no_bukti }}</p>
@@ -251,6 +260,9 @@
     <p class="tingkat">{{ $tingkat }}</p>
     <p class="kelas">{{ getRomawi($student->kelas) }} - {{ $student->grup }}</p>
     <p class="terbilang">{{ terbilang($data->total) }}</p>
+    @if ($student->getDevelopmentFeeStatus()['is_paid'] == false)
+        <p class="sisa-up">Sisa UP: @currency($student->getDevelopmentFeeStatus()['remaining'])</p>
+    @endif
     @if ($data->jenis == 'M-Banking')
         <p class="jenis">[{{ $data->jenis }}]</p>
     @endif
