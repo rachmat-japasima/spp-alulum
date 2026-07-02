@@ -780,10 +780,10 @@
                             <div class="col-12 col-md-3">
                                 <div class="mb-3">
                                     <label for="no_bukti" class="col-form-label">No. Bukti :</label>
-                                    <input type="text" class="form-control" value="{{ $transactionId }}"
-                                        disabled>
+                                    <input type="text" class="form-control"
+                                        value="{{ old('no_bukti', $transactionId) }}" disabled>
                                     <input type="hidden" class="form-control" name="no_bukti" id="no_bukti"
-                                        value="{{ $transactionId }}" required>
+                                        value="{{ old('no_bukti', $transactionId) }}" required>
                                 </div>
                             </div>
                             <div class="col-12 col-md-3">
@@ -802,8 +802,8 @@
                             <div class="col-12 col-md-4">
                                 <div class="mb-3">
                                     <label for="nama" class="col-form-label">Nama Siswa :</label>
-                                    <input type="hidden" class="form-control" id="id" name="id"
-                                        required value="{{ $data->id }}">
+                                    <input type="hidden" class="form-control" name="student_id" required
+                                        value="{{ $data->id }}">
                                     <input type="text" class="form-control" id="nama"
                                         value="{{ $data->nis }} / {{ $data->nama }}" disabled>
                                 </div>
@@ -1010,13 +1010,23 @@
                     </div>
                     <div>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                        <button type="submit" class="btn btn-primary">Proses Pembayaran</button>
+                        <button id="btnSubmitPayment" type="submit" class="btn btn-primary">Proses
+                            Pembayaran</button>
                         </form>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    @if (session('print_url'))
+        <script>
+            window.open(
+                "{{ session('print_url') }}",
+                "_blank"
+            );
+        </script>
+    @endif
 
     @push('addon-styles')
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />

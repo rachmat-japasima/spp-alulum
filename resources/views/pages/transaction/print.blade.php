@@ -318,6 +318,20 @@
     {{-- <p class="jumlah">@currency($data->total)</p> --}}
     <p class="tanggal-invoice">{{ \Carbon\Carbon::now()->format('d F Y') }}</p>
     <p class="admin">{{ $data->user->name }}</p>
+
+    <script>
+        window.onload = function() {
+
+            window.print();
+
+            window.onafterprint = function() {
+
+                window.close();
+
+            };
+
+        };
+    </script>
 </body>
 
 </html>

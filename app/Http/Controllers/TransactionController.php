@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\PaymentRequest;
 use App\Jobs\SendMessageJob;
 use App\Models\Discount;
 use App\Models\DiscountStudent;
@@ -18,6 +19,7 @@ use App\Models\SchoolYear;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use App\Models\Student;
+use App\Services\PaymentService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
@@ -274,254 +276,275 @@ class TransactionController extends Controller
         //
     }
 
-    public function pay(Request $request): RedirectResponse
+    // public function pay(Request $request): RedirectResponse
+    // {
+    //     if (Transaction::where('no_bukti', $request->no_bukti)) {
+    //         $lastNumber = Transaction::whereDate('tgl_transaksi', Carbon::today())->count();
+    //         $request['no_bukti'] = Carbon::now('Asia/Jakarta')->format('dmY') . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+    //     }
+
+    //     $request->validate([
+    //         'no_bukti' => ['required', 'string', 'max:255', Rule::unique('transaksi')->where('status', 'Success')],
+    //         'tahun_ajaran' => ['required', 'string'],
+    //         'id' => ['required', 'integer'],
+    //         'uang_sekolah' => ['required', 'integer'],
+    //         'tingkat' => ['required', 'string'],
+    //         'uang_pembangunan' => ['numeric', 'min:0'],
+    //         'uang_pemeliharaan' => ['numeric', 'min:0'],
+    //         'uang_perlengkapan' => ['numeric', 'min:0'],
+    //     ]);
+
+    //     $student = Student::findorFail($request->id);
+
+    //     $data = [];
+    //     $data['no_bukti'] = $request->no_bukti;
+    //     $data['id_siswa'] = $request->id;
+    //     $data['tahun_ajaran'] = $request->tahun_ajaran;
+    //     $data['nis'] = $student->nis;
+    //     $data['tingkat'] = $request->tingkat;
+    //     $data['tgl_transaksi'] = Carbon::now();
+
+    //     if ($request->transfer) {
+    //         $data['jenis'] = "M-Banking";
+    //     } else {
+    //         $data['jenis'] = "Manual";
+    //     }
+
+
+    //     // uang sekolah
+    //     $last_month = 0;
+    //     if ($request->bulan != null) {
+    //         $last_month = last($request->bulan);
+    //         if (count($request->bulan) > 0) {
+    //             $total_bulan = count($request->bulan);
+    //             $data['jumlah_bulan'] = $total_bulan;
+    //             $data['jumlah_us'] = $total_bulan * $request->uang_sekolah;
+    //             if ($total_bulan > 1) {
+    //                 $listBulan = Carbon::parse($request->bulan[0])->format('M') . '-' . Carbon::parse($request->bulan[$total_bulan - 1])->format('M');
+    //             } else {
+    //                 $listBulan = Carbon::parse($request->bulan[0])->format('M');
+    //             }
+    //             $data['bulan'] = $listBulan;
+    //         } else {
+    //             $data['jumlah_bulan'] = 0;
+    //             $data['jumlah_us'] = 0;
+    //             $data['bulan'] = null;
+    //         }
+    //     } else {
+    //         $data['jumlah_bulan'] = 0;
+    //         $data['jumlah_us'] = 0;
+    //         $data['bulan'] = null;
+    //     }
+
+    //     // potongan
+    //     $percentUS = 0;
+    //     $percentUP = 0;
+    //     $percentUPP = 0;
+    //     $potUS = 0;
+    //     $potUP = 0;
+    //     $potUPP = 0;
+    //     if ($request->potongan != null) {
+    //         if (count($request->potongan) > 0) {
+    //             foreach ($request->potongan as $potongan) {
+    //                 $data_pot = Discount::findorFail($potongan);
+    //                 if ($data_pot->jenis == "Uang Sekolah") {
+    //                     $percentUS += $data_pot->besaran;
+    //                 } else if ($data_pot->jenis == "Uang Pembangunan") {
+    //                     $percentUP += $data_pot->besaran;
+    //                 } else if ($data_pot->jenis == "Uang Pemeliharaan dan Pengembangan") {
+    //                     $percentUPP += $data_pot->besaran;
+    //                 }
+    //             }
+
+    //             if ($request->bulan != null) {
+    //                 $total_bulan = count($request->bulan);
+    //                 $potUS = (($request->uang_sekolah * $percentUS) / 100) * $total_bulan;
+    //             }
+
+    //             if ($request->pembangunan) {
+    //                 $potUP = ($request->uang_pembangunan * $percentUP) / 100;
+    //             }
+
+    //             if ($request->pemeliharaan) {
+    //                 $potUPP = ($request->uang_pemeliharaan * $percentUPP) / 100;
+    //             }
+
+    //             $data['jumlah_potongan'] = $potUS + $potUP + $potUPP;
+    //         } else {
+    //             $data['jumlah_potongan'] = 0;
+    //         }
+    //     } else {
+    //         $data['jumlah_potongan'] = 0;
+    //     }
+
+    //     // uang pembangunan
+    //     if ($request->pembangunan) {
+    //         $uang_pembangunan = $request->uang_pembangunan;
+    //         $data['jumlah_up'] = $uang_pembangunan;
+    //     } else {
+    //         $data['jumlah_up'] = 0;
+    //     }
+
+    //     // uang pemeliharaan dan pengembangan
+    //     if ($request->pemeliharaan) {
+    //         $uang_pemeliharaan = $request->uang_pemeliharaan;
+    //         $data['jumlah_upp'] = $uang_pemeliharaan;
+    //     } else {
+    //         $data['jumlah_upp'] = 0;
+    //     }
+
+    //     //  uang perlengkapan
+    //     if ($request->perlengkapan) {
+    //         $uang_perlengkapan = $request->uang_perlengkapan;
+    //         $data['jumlah_upk'] = $uang_perlengkapan;
+    //     } else {
+    //         $data['jumlah_upk'] = 0;
+    //     }
+
+    //     // uang lainnya
+    //     if ($request->lainnya) {
+    //         if (count($request->total_lainnya) > 0) {
+    //             $jumlah_lainnya = 0;
+    //             foreach ($request->total_lainnya as $lainnya) {
+    //                 $jumlah_lainnya += $lainnya;
+    //             }
+    //             $data['jumlah_lainnya'] = $jumlah_lainnya;
+    //         } else {
+    //             $data['jumlah_lainnya'] = 0;
+    //         }
+    //     } else {
+    //         $data['jumlah_lainnya'] = 0;
+    //     }
+
+    //     $data['total'] = ($data['jumlah_up'] + $data['jumlah_us'] + $data['jumlah_lainnya'] + $data['jumlah_upp'] + $data['jumlah_upk']) - $data['jumlah_potongan'];
+    //     $data['id_user'] = Auth::user()->id;
+    //     $data['keterangan'] = $request->keterangan;
+    //     $data['status'] = 'Success';
+
+    //     // print_r($data);
+
+    //     $transaction = Transaction::create($data);
+
+    //     if ($transaction) {
+
+    //         if ($request->bulan != null) {
+    //             $us = $request->uang_sekolah;
+
+    //             if ($request->potongan != null) {
+    //                 if (count($request->potongan) > 0) {
+    //                     $us = $us - (($us * $percentUS) / 100);
+    //                     foreach ($request->potongan as $potongan) {
+    //                         $data_pot = Discount::findorFail($potongan);
+
+    //                         if ($data_pot->jenis == 'Uang Sekolah') {
+    //                             $total_pot = (($request->uang_sekolah * $data_pot->besaran) / 100) * count($request->bulan);
+    //                             DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+
+    //             foreach ($request->bulan as $bulan) {
+    //                 $textBulan = $this->numberToMonth(Carbon::parse($bulan)->format('m'));
+    //                 SchoolFeeTransaction::create(['id_transaksi' => $transaction->id, 'bulan' => $textBulan, 'total' => $us]);
+    //             }
+
+    //             $student->bulan_spp_terakhir = $last_month;
+    //             $student->save();
+    //         }
+
+    //         //  insert to transaksi pembangunan
+    //         if ($request->pembangunan) {
+    //             $up = $uang_pembangunan;
+    //             if ($request->potongan != null) {
+    //                 if (count($request->potongan) > 0) {
+    //                     if ($percentUP > 0) {
+    //                         $up = $uang_pembangunan - (($uang_pembangunan * $percentUP) / 100);
+    //                     }
+
+    //                     foreach ($request->potongan as $potongan) {
+    //                         $data_pot = Discount::findorFail($potongan);
+
+    //                         if ($data_pot->jenis == 'Uang Pembangunan') {
+    //                             $total_pot = ($uang_pembangunan * $data_pot->besaran) / 100;
+    //                             DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+    //             SchoolDevFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $up, 'keterangan' => $request->pembangunan_ket]);
+    //         }
+
+    //         // insert to transaksi pemeliharaan dan penegembangan
+    //         if ($request->pemeliharaan) {
+    //             $upp = $uang_pemeliharaan;
+    //             if ($request->potongan != null) {
+    //                 if (count($request->potongan) > 0) {
+    //                     if ($percentUPP > 0) {
+    //                         $upp = $uang_pemeliharaan - (($uang_pemeliharaan * $percentUPP) / 100);
+    //                     }
+
+    //                     foreach ($request->potongan as $potongan) {
+    //                         $data_pot = Discount::findorFail($potongan);
+
+    //                         if ($data_pot->jenis == 'Uang Pemeliharaan dan Pengembangan') {
+    //                             $total_pot = ($uang_pemeliharaan * $data_pot->besaran) / 100;
+    //                             DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+
+    //             SchoolMaintenanceFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upp, 'keterangan' => $request->pemeliharaan_ket]);
+    //         }
+
+    //         // insert to transaksi perlengkapan
+    //         if ($request->perlengkapan) {
+    //             $upk = $uang_perlengkapan;
+    //             SchoolEquipmentFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upk, 'keterangan' => $request->perlengkapan_ket]);
+    //         }
+
+    //         // insert to transaksi lainnya
+    //         if ($request->lainnya) {
+    //             if (count($request->total_lainnya) > 0) {
+    //                 for ($i = 0; $i <= (count($request->total_lainnya) - 1); $i++) {
+    //                     OtherTransaction::create(['id_transaksi' => $transaction->id, 'total' => $request->total_lainnya[$i], 'keterangan' => $request->lainnya_ket[$i]]);
+    //                 }
+    //             }
+    //         }
+
+    //         if ($student->telp_ortu != null && $student->telp_ortu != '' && strlen($student->telp_ortu) > 0 && strlen($student->telp_ortu) < 14) {
+    //             // $this->sendMessage($student->telp_ortu, $transaction);
+    //         }
+
+    //         session()->flash(route('transactions.print', $transaction->id));
+    //     }
+
+    //     Alert::success('Berhasil', 'Pembayaran berhasil diproses!');
+    //     return redirect()->route('transactions.show', $request->id);
+    // }
+
+    public function __construct(
+        protected PaymentService $paymentService
+    ) {}
+
+    public function pay(PaymentRequest $request): RedirectResponse
     {
-        if (Transaction::where('no_bukti', $request->no_bukti)) {
-            $lastNumber = Transaction::whereDate('tgl_transaksi', Carbon::today())->count();
-            $request['no_bukti'] = Carbon::now('Asia/Jakarta')->format('dmY') . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
-        }
+        $transaction = $this->paymentService->pay($request);
 
-        $request->validate([
-            'no_bukti' => ['required', 'string', 'max:255', Rule::unique('transaksi')->where('status', 'Success')],
-            'tahun_ajaran' => ['required', 'string'],
-            'id' => ['required', 'integer'],
-            'uang_sekolah' => ['required', 'integer'],
-            'tingkat' => ['required', 'string'],
-            'uang_pembangunan' => ['numeric', 'min:0'],
-            'uang_pemeliharaan' => ['numeric', 'min:0'],
-            'uang_perlengkapan' => ['numeric', 'min:0'],
-        ]);
+        Alert::success(
+            'Berhasil',
+            'Pembayaran berhasil diproses!'
+        );
 
-        $student = Student::findorFail($request->id);
-
-        $data = [];
-        $data['no_bukti'] = $request->no_bukti;
-        $data['id_siswa'] = $request->id;
-        $data['tahun_ajaran'] = $request->tahun_ajaran;
-        $data['nis'] = $student->nis;
-        $data['tingkat'] = $request->tingkat;
-        $data['tgl_transaksi'] = Carbon::now();
-
-        if ($request->transfer) {
-            $data['jenis'] = "M-Banking";
-        } else {
-            $data['jenis'] = "Manual";
-        }
-
-
-        // uang sekolah
-        $last_month = 0;
-        if ($request->bulan != null) {
-            $last_month = last($request->bulan);
-            if (count($request->bulan) > 0) {
-                $total_bulan = count($request->bulan);
-                $data['jumlah_bulan'] = $total_bulan;
-                $data['jumlah_us'] = $total_bulan * $request->uang_sekolah;
-                if ($total_bulan > 1) {
-                    $listBulan = Carbon::parse($request->bulan[0])->format('M') . '-' . Carbon::parse($request->bulan[$total_bulan - 1])->format('M');
-                } else {
-                    $listBulan = Carbon::parse($request->bulan[0])->format('M');
-                }
-                $data['bulan'] = $listBulan;
-            } else {
-                $data['jumlah_bulan'] = 0;
-                $data['jumlah_us'] = 0;
-                $data['bulan'] = null;
-            }
-        } else {
-            $data['jumlah_bulan'] = 0;
-            $data['jumlah_us'] = 0;
-            $data['bulan'] = null;
-        }
-
-        // potongan
-        $percentUS = 0;
-        $percentUP = 0;
-        $percentUPP = 0;
-        $potUS = 0;
-        $potUP = 0;
-        $potUPP = 0;
-        if ($request->potongan != null) {
-            if (count($request->potongan) > 0) {
-                foreach ($request->potongan as $potongan) {
-                    $data_pot = Discount::findorFail($potongan);
-                    if ($data_pot->jenis == "Uang Sekolah") {
-                        $percentUS += $data_pot->besaran;
-                    } else if ($data_pot->jenis == "Uang Pembangunan") {
-                        $percentUP += $data_pot->besaran;
-                    } else if ($data_pot->jenis == "Uang Pemeliharaan dan Pengembangan") {
-                        $percentUPP += $data_pot->besaran;
-                    }
-                }
-
-                if ($request->bulan != null) {
-                    $total_bulan = count($request->bulan);
-                    $potUS = (($request->uang_sekolah * $percentUS) / 100) * $total_bulan;
-                }
-
-                if ($request->pembangunan) {
-                    $potUP = ($request->uang_pembangunan * $percentUP) / 100;
-                }
-
-                if ($request->pemeliharaan) {
-                    $potUPP = ($request->uang_pemeliharaan * $percentUPP) / 100;
-                }
-
-                $data['jumlah_potongan'] = $potUS + $potUP + $potUPP;
-            } else {
-                $data['jumlah_potongan'] = 0;
-            }
-        } else {
-            $data['jumlah_potongan'] = 0;
-        }
-
-        // uang pembangunan
-        if ($request->pembangunan) {
-            $uang_pembangunan = $request->uang_pembangunan;
-            $data['jumlah_up'] = $uang_pembangunan;
-        } else {
-            $data['jumlah_up'] = 0;
-        }
-
-        // uang pemeliharaan dan pengembangan
-        if ($request->pemeliharaan) {
-            $uang_pemeliharaan = $request->uang_pemeliharaan;
-            $data['jumlah_upp'] = $uang_pemeliharaan;
-        } else {
-            $data['jumlah_upp'] = 0;
-        }
-
-        //  uang perlengkapan
-        if ($request->perlengkapan) {
-            $uang_perlengkapan = $request->uang_perlengkapan;
-            $data['jumlah_upk'] = $uang_perlengkapan;
-        } else {
-            $data['jumlah_upk'] = 0;
-        }
-
-        // uang lainnya
-        if ($request->lainnya) {
-            if (count($request->total_lainnya) > 0) {
-                $jumlah_lainnya = 0;
-                foreach ($request->total_lainnya as $lainnya) {
-                    $jumlah_lainnya += $lainnya;
-                }
-                $data['jumlah_lainnya'] = $jumlah_lainnya;
-            } else {
-                $data['jumlah_lainnya'] = 0;
-            }
-        } else {
-            $data['jumlah_lainnya'] = 0;
-        }
-
-        $data['total'] = ($data['jumlah_up'] + $data['jumlah_us'] + $data['jumlah_lainnya'] + $data['jumlah_upp'] + $data['jumlah_upk']) - $data['jumlah_potongan'];
-        $data['id_user'] = Auth::user()->id;
-        $data['keterangan'] = $request->keterangan;
-        $data['status'] = 'Success';
-
-        // print_r($data);
-
-        $transaction = Transaction::create($data);
-
-        if ($transaction) {
-
-            if ($request->bulan != null) {
-                $us = $request->uang_sekolah;
-
-                if ($request->potongan != null) {
-                    if (count($request->potongan) > 0) {
-                        $us = $us - (($us * $percentUS) / 100);
-                        foreach ($request->potongan as $potongan) {
-                            $data_pot = Discount::findorFail($potongan);
-
-                            if ($data_pot->jenis == 'Uang Sekolah') {
-                                $total_pot = (($request->uang_sekolah * $data_pot->besaran) / 100) * count($request->bulan);
-                                DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
-                            }
-                        }
-                    }
-                }
-
-
-                foreach ($request->bulan as $bulan) {
-                    $textBulan = $this->numberToMonth(Carbon::parse($bulan)->format('m'));
-                    SchoolFeeTransaction::create(['id_transaksi' => $transaction->id, 'bulan' => $textBulan, 'total' => $us]);
-                }
-
-                $student->bulan_spp_terakhir = $last_month;
-                $student->save();
-            }
-
-            //  insert to transaksi pembangunan
-            if ($request->pembangunan) {
-                $up = $uang_pembangunan;
-                if ($request->potongan != null) {
-                    if (count($request->potongan) > 0) {
-                        if ($percentUP > 0) {
-                            $up = $uang_pembangunan - (($uang_pembangunan * $percentUP) / 100);
-                        }
-
-                        foreach ($request->potongan as $potongan) {
-                            $data_pot = Discount::findorFail($potongan);
-
-                            if ($data_pot->jenis == 'Uang Pembangunan') {
-                                $total_pot = ($uang_pembangunan * $data_pot->besaran) / 100;
-                                DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
-                            }
-                        }
-                    }
-                }
-
-                SchoolDevFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $up, 'keterangan' => $request->pembangunan_ket]);
-            }
-
-            // insert to transaksi pemeliharaan dan penegembangan
-            if ($request->pemeliharaan) {
-                $upp = $uang_pemeliharaan;
-                if ($request->potongan != null) {
-                    if (count($request->potongan) > 0) {
-                        if ($percentUPP > 0) {
-                            $upp = $uang_pemeliharaan - (($uang_pemeliharaan * $percentUPP) / 100);
-                        }
-
-                        foreach ($request->potongan as $potongan) {
-                            $data_pot = Discount::findorFail($potongan);
-
-                            if ($data_pot->jenis == 'Uang Pemeliharaan dan Pengembangan') {
-                                $total_pot = ($uang_pemeliharaan * $data_pot->besaran) / 100;
-                                DiscountTransaction::create(['id_transaksi' => $transaction->id, 'id_potongan' => $potongan, 'total' => $total_pot]);
-                            }
-                        }
-                    }
-                }
-
-                SchoolMaintenanceFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upp, 'keterangan' => $request->pemeliharaan_ket]);
-            }
-
-            // insert to transaksi perlengkapan
-            if ($request->perlengkapan) {
-                $upk = $uang_perlengkapan;
-                SchoolEquipmentFeeTransaction::create(['id_transaksi' => $transaction->id, 'total' => $upk, 'keterangan' => $request->perlengkapan_ket]);
-            }
-
-            // insert to transaksi lainnya
-            if ($request->lainnya) {
-                if (count($request->total_lainnya) > 0) {
-                    for ($i = 0; $i <= (count($request->total_lainnya) - 1); $i++) {
-                        OtherTransaction::create(['id_transaksi' => $transaction->id, 'total' => $request->total_lainnya[$i], 'keterangan' => $request->lainnya_ket[$i]]);
-                    }
-                }
-            }
-
-            if ($student->telp_ortu != null && $student->telp_ortu != '' && strlen($student->telp_ortu) > 0 && strlen($student->telp_ortu) < 14) {
-                // $this->sendMessage($student->telp_ortu, $transaction);
-            }
-
-            session()->flash(route('transactions.print', $transaction->id));
-        }
-
-        Alert::success('Berhasil', 'Pembayaran berhasil diproses!');
-        return redirect()->route('transactions.show', $request->id);
+        return redirect()
+            ->route('transactions.show', $request->student_id)
+            ->with(
+                'print_url',
+                route('transactions.print', $transaction->id)
+            );
     }
 
     // transaction details
@@ -568,38 +591,6 @@ class TransactionController extends Controller
 
         // return Redirect::to('/');
         // return $data;
-    }
-
-    function monthToNumber($month)
-    {
-        switch ($month) {
-            case 'Januari':
-                return 1;
-            case 'Februari':
-                return 2;
-            case 'Maret':
-                return 3;
-            case 'April':
-                return 4;
-            case 'Mei':
-                return 5;
-            case 'Juni':
-                return 6;
-            case 'Juli':
-                return 7;
-            case 'Agustus':
-                return 8;
-            case 'September':
-                return 9;
-            case 'Oktober':
-                return 10;
-            case 'November':
-                return 11;
-            case 'Desember':
-                return 12;
-            default:
-                return 0;
-        }
     }
 
     function getArrearsMonths($lastMonth)
