@@ -112,6 +112,8 @@
         }
 
         .jumlah-new {
+            position: absolute;
+            margin-top: 2.0cm;
             margin-left: 1.3cm;
         }
 
