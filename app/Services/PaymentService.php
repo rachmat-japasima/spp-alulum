@@ -50,10 +50,6 @@ class PaymentService
                 $discounts
             );
 
-            $transaction = Transaction::create(
-                $calculation['data']
-            );
-
             /**
              * Simpan transaksi utama
              */
